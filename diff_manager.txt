@@ -1,0 +1,11 @@
+--- original_manager.py	2017-04-25 13:15:17.000000000 +0900
++++ manager.py	2017-04-25 13:17:35.000000000 +0900
+@@ -315,6 +315,8 @@ class KernelManager(ConnectionFileMixin)
+         # Stop monitoring for restarting while we shutdown.
+         self.stop_restarter()
+ 
++        self.interrupt_kernel()
++        time.sleep(5.0)
+         if now:
+             self._kill_kernel()
+         else:

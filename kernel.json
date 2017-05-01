@@ -1,0 +1,4 @@
+{"argv":["python","-m","lc_wrapper", "-f", "{connection_file}"],
+ "display_name":"lc_wrapper",
+ "language": "python"
+}
