@@ -26,6 +26,7 @@ import os
 import os.path
 from ipython_genutils.py3compat import PY3
 from jupyter_client.multikernelmanager import MultiKernelManager
+from jupyter_core.paths import jupyter_runtime_dir
 import re
 import json
 import threading
@@ -62,6 +63,7 @@ class PythonKernelBuffered(Kernel):
 
     def start_ipython_kernel(self):
         self.km = MultiKernelManager()
+        self.km.connection_dir = jupyter_runtime_dir()
         self.kernelid = self.km.start_kernel('python3') if PY3 else self.km.start_kernel('python2')
 
         self.log.debug('>>>>>>  start ipython kernel: %s' % self.kernelid)
@@ -586,12 +588,6 @@ class PythonKernelBuffered(Kernel):
             if self.kernelid in self.km.list_kernel_ids():
                 self.km.shutdown_kernel(self.kernelid, now=False, restart=restart)
 
-        kernel_json_file = '{}/kernel-{}.json'.format(self.notebook_path, self.kernelid)
-        if os.path.isfile(kernel_json_file) and restart is False:
-            os.remove(kernel_json_file)
-            self.log.debug('>>>>> self.kernelid is erased')
-        else:
-            self.log.debug('>>>>> self.kernelid is NOT erased')
         return {'status': 'ok', 'restart': restart}
 
     def _recv_reply(self, msg_id, timeout=None):
