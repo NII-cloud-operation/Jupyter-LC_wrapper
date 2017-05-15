@@ -26,6 +26,7 @@ import os
 import os.path
 from ipython_genutils.py3compat import PY3
 from jupyter_client.multikernelmanager import MultiKernelManager
+from jupyter_client.ioloop import IOLoopKernelManager
 from jupyter_core.paths import jupyter_runtime_dir
 import re
 import json
@@ -826,6 +827,27 @@ class PythonKernelBuffered(Kernel):
             timeout = max(0, deadline - monotonic())
         return reply_hook(msg_id, timeout=timeout)
 
+class LCWrapperKernelManager(IOLoopKernelManager):
+    """Kernel manager for LC_wrapper kernel"""
+
+    def shutdown_kernel(self, now=False, restart=False):
+        # Stop monitoring for restarting while we shutdown.
+        self.stop_restarter()
+
+        self.log.debug("Interrupting the wrapper kernel and its subprocesses")
+        self.interrupt_kernel()
+        time.sleep(5.0)
+
+        if now:
+            self._kill_kernel()
+        else:
+            self.request_shutdown(restart=restart)
+            # Don't send any additional kernel kill messages immediately, to give
+            # the kernel a chance to properly execute shutdown actions. Wait for at
+            # most 1s, checking every 0.1s.
+            self.finish_shutdown()
+
+        self.cleanup(connection_file=not restart)
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp

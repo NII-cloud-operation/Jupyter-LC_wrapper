@@ -40,18 +40,14 @@ The lc_wrapper has several features shown below:
 jupyter nbextension install lc_CodeCell_execute --user
 jupyter nbextension enable lc_CodeCell_execute/main --user
 ```
-#### Patch for KernelManager
-* Patch to shutdown_kernel() in /jupyter_client/manager.py
+#### Replace KernelManager
+
+Replace KernelManager for customized `shutdown_kernel()` behavior.
+
+Append the below line to `jupyter_notebook_config.py`.
+
 ```
-@@ -315,6 +315,8 @@ class KernelManager(ConnectionFileMixin)
-         # Stop monitoring for restarting while we shutdown.
-         self.stop_restarter()
- 
-+        self.interrupt_kernel()
-+        time.sleep(5.0)
-         if now:
-             self._kill_kernel()
-         else:
+c.MultiKernelManager.kernel_manager_class = 'lc_wrapper.LCWrapperKernelManager'
 ```
 
 
