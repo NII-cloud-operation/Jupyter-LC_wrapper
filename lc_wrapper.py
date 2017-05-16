@@ -26,6 +26,8 @@ import os
 import os.path
 from ipython_genutils.py3compat import PY3
 from jupyter_client.multikernelmanager import MultiKernelManager
+from jupyter_client.ioloop import IOLoopKernelManager
+from jupyter_core.paths import jupyter_runtime_dir
 import re
 import json
 import threading
@@ -62,6 +64,7 @@ class PythonKernelBuffered(Kernel):
 
     def start_ipython_kernel(self):
         self.km = MultiKernelManager()
+        self.km.connection_dir = jupyter_runtime_dir()
         self.kernelid = self.km.start_kernel('python3') if PY3 else self.km.start_kernel('python2')
 
         self.log.debug('>>>>>>  start ipython kernel: %s' % self.kernelid)
@@ -586,12 +589,6 @@ class PythonKernelBuffered(Kernel):
             if self.kernelid in self.km.list_kernel_ids():
                 self.km.shutdown_kernel(self.kernelid, now=False, restart=restart)
 
-        kernel_json_file = '{}/kernel-{}.json'.format(self.notebook_path, self.kernelid)
-        if os.path.isfile(kernel_json_file) and restart is False:
-            os.remove(kernel_json_file)
-            self.log.debug('>>>>> self.kernelid is erased')
-        else:
-            self.log.debug('>>>>> self.kernelid is NOT erased')
         return {'status': 'ok', 'restart': restart}
 
     def _recv_reply(self, msg_id, timeout=None):
@@ -830,6 +827,27 @@ class PythonKernelBuffered(Kernel):
             timeout = max(0, deadline - monotonic())
         return reply_hook(msg_id, timeout=timeout)
 
+class LCWrapperKernelManager(IOLoopKernelManager):
+    """Kernel manager for LC_wrapper kernel"""
+
+    def shutdown_kernel(self, now=False, restart=False):
+        # Stop monitoring for restarting while we shutdown.
+        self.stop_restarter()
+
+        self.log.debug("Interrupting the wrapper kernel and its subprocesses")
+        self.interrupt_kernel()
+        time.sleep(5.0)
+
+        if now:
+            self._kill_kernel()
+        else:
+            self.request_shutdown(restart=restart)
+            # Don't send any additional kernel kill messages immediately, to give
+            # the kernel a chance to properly execute shutdown actions. Wait for at
+            # most 1s, checking every 0.1s.
+            self.finish_shutdown()
+
+        self.cleanup(connection_file=not restart)
 
 if __name__ == '__main__':
     from ipykernel.kernelapp import IPKernelApp
