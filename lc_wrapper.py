@@ -40,8 +40,15 @@ LOG_HISTORY_KEY_LEVEL1 = 'lc_cell_data'
 LOG_HISTORY_KEY_LEVEL2 = 'lc_cell_meme'
 
 IPYTHON_DEFAULT_PATTERN_FILE = 'lc_wrapper_regex.txt'
-IPYTHON_DEFAULT_PATTERN = 'ERROR|error|Error'
-
+IPYTHON_DEFAULT_PATTERN = '''ERROR|error|Error|Panic|panic|Invalid|invalid|Warning|warning|Bad|bad
+(Not|not) (Found|found)
+(Device)? not ready
+out of (Memory|memory)
+interrupt(ed)?|abort(ed)?|stop(ped)?
+insecure|inaccessible|Forbidden|forbidden|Denied|denied
+Unauthorised|unauthorised|Unauthorized|unauthorized
+(No|no|Low|low) (.+ )?(Capacity|capacity|Space|space)
+has (encountered|stopped)'''
 
 class PythonKernelBuffered(Kernel):
     implementation = 'Literate Computing Wrapper Kernel'
