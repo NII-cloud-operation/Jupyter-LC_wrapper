@@ -50,6 +50,14 @@ Unauthorised|unauthorised|Unauthorized|unauthorized
 (No|no|Low|low) (.+ )?(Capacity|capacity|Space|space)
 has (encountered|stopped)'''
 
+
+def getfilesystemencoding():
+    encoding = sys.getfilesystemencoding()
+    if encoding is None:
+        encoding = sys.getdefaultencoding()
+    return encoding
+
+
 class PythonKernelBuffered(Kernel):
     implementation = 'Literate Computing Wrapper Kernel'
     implementation_version = '1.0'
@@ -97,7 +105,7 @@ class PythonKernelBuffered(Kernel):
             if not os.path.exists(path):
                 os.makedirs(path)
             file_name = now.strftime("%Y%m%d-%H%M%S") + "-%04d" % (now.microsecond // 1000)
-            file_full_path = '{}/{}.log'.format(path, file_name).decode('utf-8')
+            file_full_path = '{}/{}.log'.format(path, file_name)
 
         if self.log_file_object is None:
             self.log_file_object = self.open_log_file(file_full_path)
@@ -106,7 +114,7 @@ class PythonKernelBuffered(Kernel):
         self.log.debug(self.log_file_object)
 
         if not msg is None:
-            self.log_file_object.write(msg.decode('utf-8'))
+            self.log_file_object.write(msg.encode('utf-8'))
         return file_full_path
 
     def open_log_file(self, path):
@@ -142,8 +150,8 @@ class PythonKernelBuffered(Kernel):
             self.file_size = self.log_file_object.tell()
             # self.file_lines = sum(1 for line in self.log_file_object)
         else:
-            self.file_size = str(os.path.getsize(self.file_full_path))
-            self.file_lines = str(sum(1 for line in open(self.file_full_path)))
+            self.file_size = os.path.getsize(self.file_full_path)
+            self.file_lines = sum(1 for line in open(self.file_full_path))
 
     def send_code_to_ipython_kernel(self, client=None, code=None):
         if client is None:
@@ -266,6 +274,7 @@ class PythonKernelBuffered(Kernel):
         try:
             cell_log_id = dictionary[ENV_LOG_HISTORY_KEY]
             if len(cell_log_id) > 0:
+                cell_log_id = cell_log_id.encode(sys.getfilesystemencoding())
                 self.log_history_file_path = self.log_path + '/' + cell_log_id + '/' + cell_log_id + '.json'
                 self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
         except Exception:
@@ -299,7 +308,7 @@ class PythonKernelBuffered(Kernel):
                 self.repatter.append(re.compile(text))
         except Exception as e:
             self.repatter = []
-            self.keyword_buff_append('error : ' + str(e))
+            self.keyword_buff_append(u'error : ' + unicode(e))
             self.log.debug(">>>> lc_wrapper_regex: " + str(e))
 
 
@@ -320,7 +329,7 @@ class PythonKernelBuffered(Kernel):
     def log_buff_flush(self, text=None):
         self.log.debug('>>>>>> log_buff_flush')
         if len(self.summarize_log_buff) > 0:
-            self.file_full_path = self.write_log_file(self.log_path, self.file_full_path, ''.join(self.summarize_log_buff))
+            self.file_full_path = self.write_log_file(self.log_path, self.file_full_path, u''.join(self.summarize_log_buff))
             del self.summarize_log_buff[:]
 
     def log_buff_append(self, text=None):
@@ -341,7 +350,7 @@ class PythonKernelBuffered(Kernel):
 
     def read_log_history_file(self, path):
         self.log.debug('>>>>> read_log_history_file')
-        log_history_text = ''
+        log_history_text = u''
         try:
             with open(path, 'r') as file:
                 data = json.load(file)
@@ -349,10 +358,10 @@ class PythonKernelBuffered(Kernel):
             data = None
         else:
             for log in data:
-                start = 'start:{}'.format(log.get('start'))
-                end = 'end:{}'.format(log.get('end'))
-                path = 'path:{}'.format(log.get('path'))
-                log_history_text += '{}\n{}\n{}\n\n'.format(start, end, path)
+                start = u'start:{}'.format(log.get('start'))
+                end = u'end:{}'.format(log.get('end'))
+                path = u'path:{}'.format(log.get('path'))
+                log_history_text += u'{}\n{}\n{}\n\n'.format(start, end, path)
         return data, log_history_text
 
     def write_log_history_file(self, path, dict=None):
@@ -361,7 +370,7 @@ class PythonKernelBuffered(Kernel):
             self.log.debug('>>>>> write_log_history_file: not executed because path is None')
             return
         log = {'code': self.code,
-               'path': self.file_full_path,
+               'path': self.file_full_path.decode(getfilesystemencoding()),
                'start': self.start_time,
                'end': self.end_time,
                'size': self.file_size,
@@ -455,7 +464,6 @@ class PythonKernelBuffered(Kernel):
 
                 if self.count < self.summarize_start_lines:
                     self.count += len(content_text_list)
-                    # stream_content = {'name': 'stdout', 'text': content['text'].decode('utf-8')}
                     stream_content = {'name': content['name'], 'text': content['text']}
                 else:
                     self.save_msg_type = 'stream'
@@ -465,17 +473,18 @@ class PythonKernelBuffered(Kernel):
 
                     self.send_clear_content_msg()
 
-                    stream_text = '{}'.format(self.log_history_text)
-                    stream_text += 'start time: {}\n'.format(self.start_time)
-                    stream_text += 'Output Size(byte): {}, Path: {}\n\n'.format(self.file_size, self.file_full_path)
-                    stream_text += '{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
+                    stream_text = u'{}'.format(self.log_history_text)
+                    stream_text += u'start time: {}\n'.format(self.start_time)
+                    file_full_path = self.file_full_path.decode(getfilesystemencoding())
+                    stream_text += u'Output Size(byte): {}, Path: {}\n\n'.format(self.file_size, file_full_path)
+                    stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
                     if len(self.keyword_buff) > 0:
-                        stream_text += '...\n'
-                        stream_text += '\033[0;31m{}\033[0m\n'.format('\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]))
-                    stream_text += '...\n'
-                    stream_text += '{}'.format('\n'.join(content_text_list[:self.summarize_exec_lines]))
+                        stream_text += u'...\n'
+                        stream_text += u'\033[0;31m{}\033[0m\n'.format(u'\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]))
+                    stream_text += u'...\n'
+                    stream_text += u'{}'.format('\n'.join(content_text_list[:self.summarize_exec_lines]))
 
-                    stream_content = {'name': 'stdout', 'text': stream_text.decode('utf-8')}
+                    stream_content = {'name': 'stdout', 'text': stream_text}
                 self.send_response(self.iopub_socket, 'stream', stream_content)
         elif msg_type in ('display_data', 'execute_result'):
             execute_result = {'data': content['data'], 'execution_count': self.execution_count, 'metadata':{}}
@@ -524,19 +533,20 @@ class PythonKernelBuffered(Kernel):
             self.send_clear_content_msg()
             self.close_files()
 
-            stream_text = '{}'.format(self.log_history_text)
-            stream_text += 'start time: {}\n'.format(self.start_time)
-            stream_text += 'end time: {}\n'.format(self.end_time)
-            stream_text += 'Output Size(byte): {}, Lines: {}, Path: {}\n'.format(self.file_size, self.file_lines, self.file_full_path)
-            stream_text += '{} keyword matched or stderr happened\n\n'.format(len(self.keyword_buff))
-            stream_text += '{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
+            stream_text = u'{}'.format(self.log_history_text)
+            stream_text += u'start time: {}\n'.format(self.start_time)
+            stream_text += u'end time: {}\n'.format(self.end_time)
+            file_full_path = self.file_full_path.decode(getfilesystemencoding())
+            stream_text += u'Output Size(byte): {}, Lines: {}, Path: {}\n'.format(self.file_size, self.file_lines, file_full_path)
+            stream_text += u'{} keyword matched or stderr happened\n\n'.format(len(self.keyword_buff))
+            stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
             if len(self.keyword_buff) > 0:
-                stream_text += '...\n'
-                stream_text += '\033[0;31m{}\033[0m\n'.format('\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]))
-            stream_text += '...\n'
-            stream_text += '{}'.format('\n'.join(self.summarize_footer_buff[-self.summarize_footer_lines:]))
+                stream_text += u'...\n'
+                stream_text += u'\033[0;31m{}\033[0m\n'.format(u'\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]))
+            stream_text += u'...\n'
+            stream_text += u'{}'.format('\n'.join(self.summarize_footer_buff[-self.summarize_footer_lines:]))
 
-            stream_content = {'name': 'stdout', 'text': stream_text.decode('utf-8')}
+            stream_content = {'name': 'stdout', 'text': stream_text}
             self.send_response(self.iopub_socket, 'stream', stream_content)
         if self.is_error:
             self.session.send(self.iopub_socket, 'error', error_content, self._parent_header,
@@ -557,6 +567,7 @@ class PythonKernelBuffered(Kernel):
             self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
         else:
             if cell_log_id:
+                cell_log_id = cell_log_id.encode(getfilesystemencoding())
                 self.log_history_file_path = self.log_path + '/' + cell_log_id + '/' + cell_log_id + '.json'
             self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
         finally:
@@ -572,8 +583,9 @@ class PythonKernelBuffered(Kernel):
                 self.init_summarize()
                 self.get_env(self.kc)
                 if not self.log_history_file_path is None:
-                    self.log_buff_append('{}\n'.format(self.log_history_file_path))
-                self.log_buff_append('{}\n\n'.format(code))  # code
+                    log_history_file_path = self.log_history_file_path.decode(getfilesystemencoding())
+                    self.log_buff_append(u'{}\n'.format(log_history_file_path))
+                self.log_buff_append(u'{}\n\n'.format(code))  # code
                 stdin_hook = self._stdin_hook_default
                 output_hook = self.output_hook_summarize
                 reply_hook = self.reply_hook_summarize
