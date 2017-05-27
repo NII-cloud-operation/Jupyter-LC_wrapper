@@ -278,6 +278,8 @@ class PythonKernelBuffered(Kernel):
                 cell_log_id = cell_log_id.encode(getfilesystemencoding())
                 self.log_history_file_path = self.log_path + '/' + cell_log_id + '/' + cell_log_id + '.json'
                 self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
+            else:
+                self.log_history_file_path = None
         except Exception:
             # self.log_history_file_path = None
             self.log.debug('>>>>> exception history file path: ' + str(self.log_history_file_path))
@@ -570,6 +572,8 @@ class PythonKernelBuffered(Kernel):
             if cell_log_id:
                 cell_log_id = cell_log_id.encode(getfilesystemencoding())
                 self.log_history_file_path = self.log_path + '/' + cell_log_id + '/' + cell_log_id + '.json'
+            else:
+                self.log_history_file_path = None
             self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
         finally:
             self.data, self.log_history_text = self.read_log_history_file(self.log_history_file_path)
