@@ -8,6 +8,7 @@ except ImportError:
 import sys
 import time
 import zmq
+import io
 try:
     monotonic = time.monotonic
 except AttributeError:
@@ -114,12 +115,12 @@ class PythonKernelBuffered(Kernel):
         self.log.debug(self.log_file_object)
 
         if not msg is None:
-            self.log_file_object.write(msg.encode('utf-8'))
+            self.log_file_object.write(msg)
         return file_full_path
 
     def open_log_file(self, path):
         self.log.debug('>>>>> open_log_file')
-        return open(path, "a")
+        return io.open(path, "a", encoding='utf-8')
 
     def close_log_file(self):
         self.log.debug('>>>>> close_log_file')
