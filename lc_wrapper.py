@@ -106,7 +106,7 @@ class PythonKernelBuffered(Kernel):
             if not os.path.exists(path):
                 os.makedirs(path)
             file_name = now.strftime("%Y%m%d-%H%M%S") + "-%04d" % (now.microsecond // 1000)
-            file_full_path = '{}/{}.log'.format(path, file_name)
+            file_full_path = u'{}/{}.log'.format(path, file_name)
 
         if self.log_file_object is None:
             self.log_file_object = self.open_log_file(file_full_path)
@@ -373,7 +373,7 @@ class PythonKernelBuffered(Kernel):
             self.log.debug('>>>>> write_log_history_file: not executed because path is None')
             return
         log = {'code': self.code,
-               'path': self.file_full_path.decode(getfilesystemencoding()),
+               'path': self.file_full_path,
                'start': self.start_time,
                'end': self.end_time,
                'size': self.file_size,
@@ -478,8 +478,7 @@ class PythonKernelBuffered(Kernel):
 
                     stream_text = u'{}'.format(self.log_history_text)
                     stream_text += u'start time: {}\n'.format(self.start_time)
-                    file_full_path = self.file_full_path.decode(getfilesystemencoding())
-                    stream_text += u'Output Size(byte): {}, Path: {}\n\n'.format(self.file_size, file_full_path)
+                    stream_text += u'Output Size(byte): {}, Path: {}\n\n'.format(self.file_size, self.file_full_path)
                     stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
                     if len(self.keyword_buff) > 0:
                         stream_text += u'...\n'
@@ -539,8 +538,7 @@ class PythonKernelBuffered(Kernel):
             stream_text = u'{}'.format(self.log_history_text)
             stream_text += u'start time: {}\n'.format(self.start_time)
             stream_text += u'end time: {}\n'.format(self.end_time)
-            file_full_path = self.file_full_path.decode(getfilesystemencoding())
-            stream_text += u'Output Size(byte): {}, Lines: {}, Path: {}\n'.format(self.file_size, self.file_lines, file_full_path)
+            stream_text += u'Output Size(byte): {}, Lines: {}, Path: {}\n'.format(self.file_size, self.file_lines, self.file_full_path)
             stream_text += u'{} keyword matched or stderr happened\n\n'.format(len(self.keyword_buff))
             stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
             if len(self.keyword_buff) > 0:
@@ -588,8 +586,7 @@ class PythonKernelBuffered(Kernel):
                 self.init_summarize()
                 self.get_env(self.kc)
                 if not self.log_history_file_path is None:
-                    log_history_file_path = self.log_history_file_path.decode(getfilesystemencoding())
-                    self.log_buff_append(u'{}\n'.format(log_history_file_path))
+                    self.log_buff_append(u'{}\n'.format(self.log_history_file_path))
                 self.log_buff_append(u'{}\n\n'.format(code))  # code
                 stdin_hook = self._stdin_hook_default
                 output_hook = self.output_hook_summarize
