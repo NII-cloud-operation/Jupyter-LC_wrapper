@@ -56,13 +56,6 @@ Unauthorised|unauthorised|Unauthorized|unauthorized
 has (encountered|stopped)'''
 
 
-def getfilesystemencoding():
-    encoding = sys.getfilesystemencoding()
-    if encoding is None:
-        encoding = sys.getdefaultencoding()
-    return encoding
-
-
 class PythonKernelBuffered(Kernel):
     implementation = 'Literate Computing Wrapper Kernel'
     implementation_version = '1.0'
@@ -275,8 +268,7 @@ class PythonKernelBuffered(Kernel):
         try:
             cell_log_id = dictionary[ENV_LOG_HISTORY_KEY]
             if len(cell_log_id) > 0:
-                cell_log_id = cell_log_id.encode(getfilesystemencoding())
-                self.log_history_file_path = self.log_path + '/' + cell_log_id + '/' + cell_log_id + '.json'
+                self.log_history_file_path = os.path.join(self.log_path, cell_log_id, cell_log_id + u'.json')
                 self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
             else:
                 self.log_history_file_path = None
@@ -568,8 +560,7 @@ class PythonKernelBuffered(Kernel):
             self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
         else:
             if cell_log_id:
-                cell_log_id = cell_log_id.encode(getfilesystemencoding())
-                self.log_history_file_path = self.log_path + '/' + cell_log_id + '/' + cell_log_id + '.json'
+                self.log_history_file_path = os.path.join(self.log_path, cell_log_id, cell_log_id + u'.json')
             else:
                 self.log_history_file_path = None
             self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
