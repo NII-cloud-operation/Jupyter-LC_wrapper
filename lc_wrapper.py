@@ -32,6 +32,10 @@ from jupyter_core.paths import jupyter_runtime_dir
 import re
 import json
 import threading
+try:
+    from os import getcwdu as getcwd  # Python 2
+except ImportError:
+    from os import getcwd  # Python 3
 
 
 SUMMARIZE_KEY = 'lc_wrapper'
@@ -90,9 +94,9 @@ class PythonKernelBuffered(Kernel):
         self.kc.start_channels()
         self.kc.wait_for_ready()
         self.notebook_path = self.get_notebook_path(self.kc)
-        self.log_path = self.notebook_path + '/.log'
-        if not os.path.exists(self.notebook_path + '/' + IPYTHON_DEFAULT_PATTERN_FILE):
-            with open(self.notebook_path + '/' + IPYTHON_DEFAULT_PATTERN_FILE, 'w') as file:
+        self.log_path = os.path.join(self.notebook_path, u'.log')
+        if not os.path.exists(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE)):
+            with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE, 'w')) as file:
                 file.write(IPYTHON_DEFAULT_PATTERN)
 
         self.log.debug('>>>>> kernel id: ' + self.kernelid)
@@ -102,11 +106,11 @@ class PythonKernelBuffered(Kernel):
         self.log.debug('>>>>> write_log_file')
         if file_full_path is None:
             now = self.get_timestamp()
-            path = path + '/' + now.strftime("%Y%m%d")
+            path = os.path.join(path, now.strftime("%Y%m%d"))
             if not os.path.exists(path):
                 os.makedirs(path)
             file_name = now.strftime("%Y%m%d-%H%M%S") + "-%04d" % (now.microsecond // 1000)
-            file_full_path = u'{}/{}.log'.format(path, file_name)
+            file_full_path = os.path.join(path, file_name + u'.log')
 
         if self.log_file_object is None:
             self.log_file_object = self.open_log_file(file_full_path)
@@ -211,11 +215,7 @@ class PythonKernelBuffered(Kernel):
         return text
 
     def get_notebook_path(self, client=None):
-        # text = self.send_code_to_ipython_kernel(client, '!pwd')
-        text = os.getcwd()
-        # print('pwd: '+str(text))
-        # self.log.debug('current dir: ' + str(text))
-        return text.rstrip()
+        return getcwd()
 
     def get_env_request(self, client=None):
         text1 = self.send_code_to_ipython_kernel(client, '%env')
@@ -298,7 +298,7 @@ class PythonKernelBuffered(Kernel):
                 file_name = text[text.rfind('find:')+6:].strip()
                 if file_name == 'default':
                     file_name = IPYTHON_DEFAULT_PATTERN_FILE
-                file_path = self.notebook_path + '/' + file_name
+                file_path = os.path.join(self.notebook_path, file_name)
                 with open(file_path, 'r') as file:
                     patterns = file.readlines()
 
