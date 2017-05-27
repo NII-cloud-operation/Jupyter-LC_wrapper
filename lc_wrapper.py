@@ -96,7 +96,7 @@ class PythonKernelBuffered(Kernel):
         self.notebook_path = self.get_notebook_path(self.kc)
         self.log_path = os.path.join(self.notebook_path, u'.log')
         if not os.path.exists(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE)):
-            with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE, 'w')) as file:
+            with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE), 'w') as file:
                 file.write(IPYTHON_DEFAULT_PATTERN)
 
         self.log.debug('>>>>> kernel id: ' + self.kernelid)
