@@ -78,7 +78,7 @@ class PythonKernelBuffered(Kernel):
     def start_ipython_kernel(self):
         self.km = MultiKernelManager()
         self.km.connection_dir = jupyter_runtime_dir()
-        self.kernelid = self.km.start_kernel('python3') if PY3 else self.km.start_kernel('python2')
+        self.kernelid = self.km.start_kernel('bash')
 
         self.log.debug('>>>>>>  start ipython kernel: %s' % self.kernelid)
 
@@ -211,12 +211,8 @@ class PythonKernelBuffered(Kernel):
         return getcwd()
 
     def get_env_request(self, client=None):
-        text1 = self.send_code_to_ipython_kernel(client, '%env')
-        # text = text1.replace('\n', '').replace('\r', '').replace('\'', '\"').replace('\"\"', '\"')
-        text = text1.replace('\n', '').replace('\r', '').replace('\'', '\"')
-        self.log.debug('>>>>>>>>> get_env_request:')
-        self.log.debug(text)
-        return json.loads(text)
+        text1 = self.send_code_to_ipython_kernel(client, 'echo $lc_wrapper')
+        return { 'lc_wrapper' : text1 }
 
     def get_timestamp(self):
         now = datetime.utcnow() + timedelta(hours=9)
