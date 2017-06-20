@@ -36,6 +36,7 @@ try:
     from os import getcwdu as getcwd  # Python 2
 except ImportError:
     from os import getcwd  # Python 3
+import dateutil
 
 
 SUMMARIZE_KEY = 'lc_wrapper'
@@ -98,7 +99,7 @@ class PythonKernelBuffered(Kernel):
     def write_log_file(self, path, file_full_path=None, msg=None):
         self.log.debug('>>>>> write_log_file')
         if file_full_path is None:
-            now = self.get_timestamp()
+            now = datetime.now(dateutil.tz.tzlocal())
             path = os.path.join(path, now.strftime("%Y%m%d"))
             if not os.path.exists(path):
                 os.makedirs(path)
@@ -217,10 +218,6 @@ class PythonKernelBuffered(Kernel):
         self.log.debug('>>>>>>>>> get_env_request:')
         self.log.debug(text)
         return json.loads(text)
-
-    def get_timestamp(self):
-        now = datetime.utcnow() + timedelta(hours=9)
-        return now
 
     def send_clear_content_msg(self):
         clear_content = {'wait': True}
@@ -394,7 +391,7 @@ class PythonKernelBuffered(Kernel):
             self.log_buff_flush()
             self.close_log_file()
             self.update_file_property(closed=True)
-            self.end_time = '{}(JST)'.format(self.get_timestamp().strftime('%Y-%m-%d %H:%M:%S'))
+            self.end_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
             #save log file path
             self.write_log_history_file(self.log_history_file_path, self.data)
 
@@ -407,7 +404,7 @@ class PythonKernelBuffered(Kernel):
         self.summarize_footer_lines = 1
         self.count = 0
         self.file_full_path = None
-        self.start_time = '{}(JST)'.format(self.get_timestamp().strftime('%Y-%m-%d %H:%M:%S'))
+        self.start_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
         self.end_time = ''
         self.is_error = False
         self.save_msg_type = None
