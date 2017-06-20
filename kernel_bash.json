@@ -1,4 +1,4 @@
-{"argv":["python","-m","lc_wrapper", "-f", "{connection_file}"],
- "display_name":"lc_wrapper",
- "language": "python"
+{"argv":["python","-m","lc_wrapper_bash", "-f", "{connection_file}"],
+ "display_name":"lc_wrapper_bash",
+ "language": "bash"
 }
