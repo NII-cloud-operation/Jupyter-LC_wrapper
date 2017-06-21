@@ -304,7 +304,7 @@ class PythonKernelBuffered(Kernel):
 
 
     def is_summarize_on(self, code):
-        always = os.path.exists(os.path.expanduser("~/lc-wrapper-always-on"):
+        always = os.path.exists(os.path.expanduser("~/lc-wrapper-always-on"))
         regx = r'^\s*!!'
         m = re.match(regx, code, re.M)
         if m:
