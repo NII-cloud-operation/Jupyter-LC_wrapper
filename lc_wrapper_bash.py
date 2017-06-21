@@ -304,12 +304,13 @@ class PythonKernelBuffered(Kernel):
 
 
     def is_summarize_on(self, code):
+        always = os.path.exists(os.path.expanduser("~/lc-wrapper-always-on"):
         regx = r'^\s*!!'
         m = re.match(regx, code, re.M)
         if m:
-            return True, code[m.end():]
+            return True | always, code[m.end():]
         else:
-            return False, code
+            return False | always, code
 
     def buff_init(self):
         self.summarize_log_buff = []
