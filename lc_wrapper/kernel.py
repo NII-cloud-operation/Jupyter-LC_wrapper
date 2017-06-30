@@ -79,6 +79,7 @@ class BufferedKernelBase(Kernel):
         if not os.path.exists(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE)):
             with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE), 'w') as file:
                 file.write(IPYTHON_DEFAULT_PATTERN)
+        self._init_log()
 
         self.log.debug('>>>>> kernel id: ' + self.kernelid)
         self.log.debug(self.notebook_path)
@@ -86,25 +87,23 @@ class BufferedKernelBase(Kernel):
     def _start_kernel(self, km):
         raise NotImplementedError()
 
-    def write_log_file(self, path, file_full_path=None, msg=None):
-        self.log.debug('>>>>> write_log_file')
-        if file_full_path is None:
+    def _write_log(self, path, msg):
+        if self.file_full_path is None:
             now = datetime.now(dateutil.tz.tzlocal())
             path = os.path.join(path, now.strftime("%Y%m%d"))
             if not os.path.exists(path):
                 os.makedirs(path)
             file_name = now.strftime("%Y%m%d-%H%M%S") + "-%04d" % (now.microsecond // 1000)
-            file_full_path = os.path.join(path, file_name + u'.log')
+            self.file_full_path = os.path.join(path, file_name + u'.log')
 
         if self.log_file_object is None:
-            self.log_file_object = self.open_log_file(file_full_path)
+            self.log_file_object = self.open_log_file(self.file_full_path)
 
-        self.log.debug(file_full_path)
+        self.log.debug(self.file_full_path)
         self.log.debug(self.log_file_object)
 
         if not msg is None:
             self.log_file_object.write(msg)
-        return file_full_path
 
     def open_log_file(self, path):
         self.log.debug('>>>>> open_log_file')
@@ -130,7 +129,9 @@ class BufferedKernelBase(Kernel):
         else:
             return False
 
-    def init_file_property(self):
+    def _init_log(self):
+        self.file_full_path = None
+        self.log_file_object = None
         self.file_size = 0
         self.file_lines = 0
 
@@ -320,10 +321,10 @@ class BufferedKernelBase(Kernel):
         self.summarize_footer_buff = []
         self.keyword_buff = []
 
-    def log_buff_flush(self, text=None):
-        self.log.debug('>>>>>> log_buff_flush')
-        if len(self.summarize_log_buff) > 0:
-            self.file_full_path = self.write_log_file(self.log_path, self.file_full_path, u''.join(self.summarize_log_buff))
+    def _log_buff_flush(self, force=False):
+        if force or self.file_full_path is None or \
+           len(self.summarize_log_buff) > 100:
+            self._write_log(self.log_path, u''.join(self.summarize_log_buff))
             del self.summarize_log_buff[:]
 
     def log_buff_append(self, text=None):
@@ -390,7 +391,7 @@ class BufferedKernelBase(Kernel):
         if hasattr(self, "summarize_on") and self.summarize_on:
             self.block_messages = True
 
-            self.log_buff_flush()
+            self._log_buff_flush(force=True)
             self.close_log_file()
             self.update_file_property(closed=True)
             self.end_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
@@ -405,15 +406,11 @@ class BufferedKernelBase(Kernel):
         self.summarize_exec_lines = 1
         self.summarize_footer_lines = 1
         self.count = 0
-        self.file_full_path = None
         self.start_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
         self.end_time = ''
         self.is_error = False
         self.save_msg_type = None
-        self.init_file_property()
-
-        self.log.debug('>>>>> init_summarize: self.log_file_object = None')
-        self.log_file_object = None
+        self._init_log()
 
     def output_hook_summarize(self, msg=None):
         self.log.debug('\niopub msg is')
@@ -425,8 +422,7 @@ class BufferedKernelBase(Kernel):
                 self.send_response(self.iopub_socket, 'stream', content)
             else:
                 self.log_buff_append(content['text'])
-                if len(self.summarize_log_buff) > 100:
-                    self.log_buff_flush()
+                self._log_buff_flush()
 
                 content_text_list = content['text'].splitlines(False)    # with LF
                 # save the stderr messages
@@ -461,8 +457,7 @@ class BufferedKernelBase(Kernel):
                     stream_content = {'name': content['name'], 'text': content['text']}
                 else:
                     self.save_msg_type = 'stream'
-                    if self.file_full_path is None:
-                        self.log_buff_flush()
+                    self._log_buff_flush()
                     self.update_file_property()
 
                     self.send_clear_content_msg()
@@ -522,9 +517,9 @@ class BufferedKernelBase(Kernel):
             if self.summarize_on:
                 self.log_buff_append(content['traceback'])
 
+        self.close_files()
         if self.save_msg_type == 'stream':
             self.send_clear_content_msg()
-            self.close_files()
 
             stream_text = u'{}'.format(self.log_history_text)
             stream_text += u'start time: {}\n'.format(self.start_time)
