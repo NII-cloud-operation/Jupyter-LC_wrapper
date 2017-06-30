@@ -195,7 +195,7 @@ class BufferedKernelBase(Kernel):
                     self.log.debug(e)
             elif msg_type == 'execute_result':
                 execute_result = content['data'].get('text/plain', '')
-        return execute_result if execute_result is not None and stream_text
+        return execute_result if execute_result is not None else stream_text
 
     def get_notebook_path(self, client=None):
         return getcwd()
