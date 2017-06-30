@@ -52,9 +52,9 @@ c.MultiKernelManager.kernel_manager_class = 'lc_wrapper.LCWrapperKernelManager'
 
 ## How to Use
 
-### Enabling Summarize and Logging mode
+### Enabling Summarizing and Logging mode
 
-To use the summarize and logging mode, you should make the code cell with `!!` at the beginning of the command.
+To use the summarizing and logging mode, you should make the code cell with `!!` at the beginning of the command.
 
 ```
 Example:  
@@ -77,7 +77,7 @@ Also you can use `lc_wrapper_force` environment variable to enable/disable the m
 
 [In]
 ---
-# The summarize and logging mode enabled without `!!`
+# The summarizing and logging mode enabled without `!!`
 !ls
 ```
 
