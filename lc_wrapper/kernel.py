@@ -25,7 +25,6 @@ from ipykernel.kernelbase import Kernel
 from datetime import datetime, timedelta
 import os
 import os.path
-from ipython_genutils.py3compat import PY3
 from jupyter_client.multikernelmanager import MultiKernelManager
 from jupyter_client.ioloop import IOLoopKernelManager
 from jupyter_core.paths import jupyter_runtime_dir
@@ -57,21 +56,7 @@ Unauthorised|unauthorised|Unauthorized|unauthorized
 has (encountered|stopped)'''
 
 
-class PythonKernelBuffered(Kernel):
-    implementation = 'Literate Computing Wrapper Kernel'
-    implementation_version = '1.0'
-    language = 'python'
-    language_version = '0.1'
-    language_info = {
-        'name': 'python',
-        'version': sys.version.split()[0],
-        'mimetype': 'text/x-python',
-        'pygments_lexer': 'ipython%d' % (3 if PY3 else 2),
-        'nbconvert_exporter': 'python',
-        'file_extension': '.py'
-    }
-    banner = 'Literate Computing Wrapper Kernel'
-
+class BufferedKernelBase(Kernel):
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
         self.start_ipython_kernel()
@@ -79,7 +64,7 @@ class PythonKernelBuffered(Kernel):
     def start_ipython_kernel(self):
         self.km = MultiKernelManager()
         self.km.connection_dir = jupyter_runtime_dir()
-        self.kernelid = self.km.start_kernel('python3') if PY3 else self.km.start_kernel('python2')
+        self.kernelid = self._start_kernel(self.km)
 
         self.log.debug('>>>>>>  start ipython kernel: %s' % self.kernelid)
 
@@ -95,6 +80,9 @@ class PythonKernelBuffered(Kernel):
 
         self.log.debug('>>>>> kernel id: ' + self.kernelid)
         self.log.debug(self.notebook_path)
+
+    def _start_kernel(self, km):
+        raise NotImplementedError()
 
     def write_log_file(self, path, file_full_path=None, msg=None):
         self.log.debug('>>>>> write_log_file')
@@ -211,13 +199,8 @@ class PythonKernelBuffered(Kernel):
     def get_notebook_path(self, client=None):
         return getcwd()
 
-    def get_env_request(self, client=None):
-        text1 = self.send_code_to_ipython_kernel(client, '%env')
-        # text = text1.replace('\n', '').replace('\r', '').replace('\'', '\"').replace('\"\"', '\"')
-        text = text1.replace('\n', '').replace('\r', '').replace('\'', '\"')
-        self.log.debug('>>>>>>>>> get_env_request:')
-        self.log.debug(text)
-        return json.loads(text)
+    def _get_env_request(self, client):
+        raise NotImplementedError()
 
     def send_clear_content_msg(self):
         clear_content = {'wait': True}
@@ -228,42 +211,33 @@ class PythonKernelBuffered(Kernel):
         # self.log.debug('>>>>>>>> kernel info req')
         # if self.km_working:
         #     self.send_kernel_info = True
-        super(PythonKernelBuffered, self).kernel_info_request(stream, ident, parent)
+        super(BufferedKernelBase, self).kernel_info_request(stream, ident, parent)
 
-    def get_env(self, client=None):
-        try:
-            dictionary = self.get_env_request(client)
-        except Exception:
-            self.log.debug(">>> except get_env ")
-            pass
+    def _load_env(self, client):
+        env = self._get_env_request(client)
 
-        try:
-            env = dictionary[SUMMARIZE_KEY]
-            self.log.debug(">>>> lc_wrapper: " + env)
-        except Exception:
-            env = '1:1:1:1'
-            self.log.debug(">>>> cannnot get lc_wrapper: " + env)
-        finally:
-            env_list = env.split(':')
-            if len(env_list) < 4:
-                self.log.debug(" len(env_list) < 4 ")
-                self.summarize_start_lines = 1
-                self.summarize_header_lines = 1
-                self.summarize_header_lines = 1
-                self.summarize_footer_lines = 1
-            else:
-                self.log.debug(" len(env_list) >= 4 ")
-                if len(env_list[0]) != 0:
-                    self.summarize_start_lines = int(env_list[0])
-                if len(env_list[1]) != 0:
-                    self.summarize_header_lines = int(env_list[1])
-                if len(env_list[2]) != 0:
-                    self.summarize_exec_lines = int(env_list[2])
-                if len(env_list[3]) != 0:
-                    self.summarize_footer_lines = int(env_list[3])
+        summarize = env.get(SUMMARIZE_KEY, '')
+        self.log.debug("lc_wrapper = " + summarize)
+        summarize_params = summarize.split(':')
+        if len(summarize_params) == 4 and len(summarize_params[0]) != 0:
+            self.summarize_start_lines = int(summarize_params[0])
+        else:
+            self.summarize_start_lines = 1
+        if len(summarize_params) == 4 and len(summarize_params[1]) != 0:
+            self.summarize_header_lines = int(summarize_params[1])
+        else:
+            self.summarize_header_lines = 1
+        if len(summarize_params) == 4 and len(summarize_params[2]) != 0:
+            self.summarize_exec_lines = int(summarize_params[2])
+        else:
+            self.summarize_exec_lines = 1
+        if len(summarize_params) == 4 and len(summarize_params[3]) != 0:
+            self.summarize_footer_lines = int(summarize_params[3])
+        else:
+            self.summarize_footer_lines = 1
 
         try:
-            cell_log_id = dictionary[ENV_LOG_HISTORY_KEY]
+            cell_log_id = env[ENV_LOG_HISTORY_KEY]
             if len(cell_log_id) > 0:
                 self.log_history_file_path = os.path.join(self.log_path, cell_log_id, cell_log_id + u'.json')
                 self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
@@ -277,7 +251,7 @@ class PythonKernelBuffered(Kernel):
 
         self.repatter = []
         try:
-            text = dictionary[IGNORE_SUMMARIZE_KEY]
+            text = env[IGNORE_SUMMARIZE_KEY]
         except:
             text = None
         try:
@@ -563,7 +537,7 @@ class PythonKernelBuffered(Kernel):
             self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
         finally:
             self.data, self.log_history_text = self.read_log_history_file(self.log_history_file_path)
-        super(PythonKernelBuffered, self).execute_request(stream, ident, parent)
+        super(BufferedKernelBase, self).execute_request(stream, ident, parent)
 
     def do_execute(self, code, silent, store_history=True, user_expressions=None,
                    allow_stdin=False):
@@ -572,7 +546,7 @@ class PythonKernelBuffered(Kernel):
             self.summarize_on, new_code = self.is_summarize_on(code)
             if self.summarize_on:
                 self.init_summarize()
-                self.get_env(self.kc)
+                self._load_env(self.kc)
                 if not self.log_history_file_path is None:
                     self.log_buff_append(u'{}\n'.format(self.log_history_file_path))
                 self.log_buff_append(u'{}\n\n'.format(code))  # code
