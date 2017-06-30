@@ -219,21 +219,22 @@ class BufferedKernelBase(Kernel):
 
         summarize = env.get(SUMMARIZE_KEY, '')
         self.log.debug("lc_wrapper = " + summarize)
-        summarize_params = summarize.split(':')
-        if len(summarize_params) == 4 and len(summarize_params[0]) != 0:
-            self.summarize_start_lines = int(summarize_params[0])
+        summarize_pattern = re.compile(r'^([0-9])*:([0-9])*:([0-9])*:([0-9])*$')
+        summarize_params = summarize_pattern.match(summarize)
+        if summarize_params is not None and len(summarize_params.group(1)) != 0:
+            self.summarize_start_lines = int(summarize_params.group(1))
         else:
             self.summarize_start_lines = 1
-        if len(summarize_params) == 4 and len(summarize_params[1]) != 0:
-            self.summarize_header_lines = int(summarize_params[1])
+        if summarize_params is not None and len(summarize_params.group(2)) != 0:
+            self.summarize_header_lines = int(summarize_params.group(2))
         else:
             self.summarize_header_lines = 1
-        if len(summarize_params) == 4 and len(summarize_params[2]) != 0:
-            self.summarize_exec_lines = int(summarize_params[2])
+        if summarize_params is not None and len(summarize_params.group(3)) != 0:
+            self.summarize_exec_lines = int(summarize_params.group(3))
         else:
             self.summarize_exec_lines = 1
-        if len(summarize_params) == 4 and len(summarize_params[3]) != 0:
-            self.summarize_footer_lines = int(summarize_params[3])
+        if summarize_params is not None and len(summarize_params.group(4)) != 0:
+            self.summarize_footer_lines = int(summarize_params.group(4))
         else:
             self.summarize_footer_lines = 1
 
