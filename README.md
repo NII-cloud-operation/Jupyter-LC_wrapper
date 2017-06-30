@@ -20,7 +20,7 @@ The lc_wrapper has several features shown below:
 ## How to Install
 #### Install Jupyter-LC_wrapper
 
-To install `lc_wrapper` from PyPI:
+To install `lc_wrapper` by pip:
 
 ```
 pip install git+https://github.com/NII-cloud-operation/Jupyter-LC_wrapper
