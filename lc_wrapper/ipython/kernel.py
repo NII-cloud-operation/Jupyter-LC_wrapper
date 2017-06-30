@@ -17,7 +17,7 @@ class PythonKernelBuffered(BufferedKernelBase):
         'nbconvert_exporter': 'python',
         'file_extension': '.py'
     }
-    banner = 'Literate Computing Wrapper Kernel'
+    banner = 'Literate Computing Wrapper Kernel(IPython)'
 
     def _start_kernel(self, km):
         return km.start_kernel('python3') if PY3 else km.start_kernel('python2')
