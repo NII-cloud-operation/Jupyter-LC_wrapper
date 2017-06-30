@@ -52,7 +52,9 @@ c.MultiKernelManager.kernel_manager_class = 'lc_wrapper.LCWrapperKernelManager'
 
 ## How to Use
 
-* Execute the code cell with '!!' at the beginning of the command.
+### Enabling Summarize and Logging mode
+
+To use the summarize and logging mode, you should make the code cell with `!!` at the beginning of the command.
 
 ```
 Example:  
@@ -65,6 +67,22 @@ Example:
 ---
 !!!ls -al
 ```
+
+Also you can use `lc_wrapper_force` environment variable to enable/disable the mode forcefully on every cell.
+
+```
+[In]
+---
+%env lc_wrapper_force=on
+
+[In]
+---
+# The summarize and logging mode enabled without `!!`
+!ls
+```
+
+### Settings by Environment Variables
+
 * Control the output area with the environment variable 'lc_wrapper'.
 
 ```
@@ -202,6 +220,18 @@ Output Size(byte): 189, Lines: 16, Path: /notebooks/.log/20170426/20170426-14391
 9
 ```
 
+### Settings by file
+
+You can apply the settings to multiple notebooks using `.lc_wrapper` configuration file in the notebook directory as follows:
+
+```
+# Example of .lc_wrapper
+lc_wrapper_force=on
+lc_wrapper=2:2:2:2
+lc_wrapper_regex=3|5|7
+```
+
+If you set both the configuration file and environment variables, the environment variables are applied and the duplicated entries in the configuration file are ignored.
 
 
 ## License
