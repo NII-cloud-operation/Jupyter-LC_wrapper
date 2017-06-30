@@ -220,7 +220,7 @@ Output Size(byte): 189, Lines: 16, Path: /notebooks/.log/20170426/20170426-14391
 9
 ```
 
-### Settings by file
+### Settings by configuration file
 
 You can apply the settings to multiple notebooks using `.lc_wrapper` configuration file in the notebook directory as follows:
 
