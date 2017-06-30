@@ -7,9 +7,9 @@ from jupyter_client.kernelspec import KernelSpecManager
 from IPython.utils.tempdir import TemporaryDirectory
 
 kernel_json = {
-    "argv": [sys.executable, "-m", "lc_wrapper", "-f", "{connection_file}"],
-    "display_name": "LC_wrapper",
-    "language": "python"
+    "argv": [sys.executable, "-m", "lc_wrapper.bash", "-f", "{connection_file}"],
+    "display_name": "LC_wrapper_bash",
+    "language": "bash"
 }
 
 def install_my_kernel_spec(user=True, prefix=None):
@@ -20,7 +20,7 @@ def install_my_kernel_spec(user=True, prefix=None):
 
         print('Installing Jupyter kernel spec')
         KernelSpecManager().install_kernel_spec(td,
-                                                'lc_wrapper',
+                                                'lc_wrapper_bash',
                                                 user=user,
                                                 replace=True,
                                                 prefix=prefix)

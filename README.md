@@ -24,7 +24,13 @@ To install `lc_wrapper` by pip:
 
 ```
 pip install git+https://github.com/NII-cloud-operation/Jupyter-LC_wrapper
-python -m lc_wrapper.install
+python -m lc_wrapper.ipython.install
+```
+
+If you'd like to use with [bash kernel](https://github.com/takluyver/bash_kernel), you can install lc_wrapper for bash kernel as follows:
+
+```
+python -m lc_wrapper.bash.install
 ```
 
 #### Install lc_CodeCell_execute (and Jupyter-LC_nblineage)
