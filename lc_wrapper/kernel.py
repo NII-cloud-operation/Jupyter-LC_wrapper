@@ -201,6 +201,27 @@ class BufferedKernelBase(Kernel):
     def _get_env_request(self, client):
         raise NotImplementedError()
 
+    def _get_config(self, client):
+        env = self._get_env_request(client)
+        config_path = os.path.join(self.notebook_path, '.lc_wrapper')
+        if not os.path.exists(config_path):
+            return env
+        line_pattern = re.compile(r'(\S+)=(".*?"|\S+)')
+        config = {}
+        with io.open(config_path, 'r', encoding='utf-8') as f:
+            for l in f.readlines():
+                l = l.strip()
+                if len(l) == 0 or l.startswith('#'):
+                    continue
+                m = line_pattern.match(l)
+                if m:
+                    config[m.group(1)] = m.group(2)
+                else:
+                    self.log.warning('Unexpected line: {}'.format(l))
+        for k, v in env:
+            config[k] = v
+        return config
+
     def send_clear_content_msg(self):
         clear_content = {'wait': True}
         self.session.send(self.iopub_socket, 'clear_output', clear_content, self._parent_header,
@@ -550,7 +571,7 @@ class BufferedKernelBase(Kernel):
                    allow_stdin=False):
         if not silent:
             self.code = code
-            env = self._get_env_request(self.kc)
+            env = self._get_config(self.kc)
             self.summarize_on, new_code = self.is_summarize_on(code, env)
             if self.summarize_on:
                 self.init_summarize()
