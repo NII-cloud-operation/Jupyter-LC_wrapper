@@ -20,19 +20,12 @@ The lc_wrapper has several features shown below:
 ## How to Install
 #### Install Jupyter-LC_wrapper
 
-* Make lc_wrapper directory under jupyter/kernels
+To install `lc_wrapper` from PyPI:
+
 ```
-  mkdir ~/.local/share/jupyter/kernels/lc_wrapper
+pip install git+https://github.com/NII-cloud-operation/Jupyter-LC_wrapper
+python -m lc_wrapper.install
 ```
-* Copy kernel.json
-```
-  cp kernel.json ~/.local/share/jupyter/kernels/lc_wrapper/
-```
-* Copy lc_wrapper.py
-```
-  cp lc_wrapper.py /usr/local/lib/python2.7/dist-packages/
-```
-* Reboot notebook server
 
 #### Install lc_CodeCell_execute (and Jupyter-LC_nblineage)
 
