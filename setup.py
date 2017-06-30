@@ -10,7 +10,7 @@ with open(os.path.join(HERE, 'lc_wrapper', '_version.py')) as f:
 setup(
     name='lc_wrapper',
     version=VERSION_NS['__version__'],
-    packages=['lc_wrapper', 'lc_wrapper.ipython'],
+    packages=['lc_wrapper', 'lc_wrapper.ipython', 'lc_wrapper.bash'],
     install_requires=['ipykernel>=4.0.0', 'jupyter_client', 'python-dateutil'],
     description='Kernel Wrapper for Literate Computing',
     author='NII Cloud Operation Team',
