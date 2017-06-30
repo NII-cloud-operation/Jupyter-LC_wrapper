@@ -41,6 +41,8 @@ import dateutil
 SUMMARIZE_KEY = 'lc_wrapper'
 ENV_LOG_HISTORY_KEY = 'lc_wrapper_uuid'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
+FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
+
 LOG_HISTORY_KEY_LEVEL1 = 'lc_cell_data'
 LOG_HISTORY_KEY_LEVEL2 = 'lc_cell_meme'
 
@@ -140,11 +142,7 @@ class BufferedKernelBase(Kernel):
             self.file_size = os.path.getsize(self.file_full_path)
             self.file_lines = sum(1 for line in open(self.file_full_path))
 
-    def send_code_to_ipython_kernel(self, client=None, code=None):
-        if client is None:
-            return
-        if code is None:
-            return
+    def send_code_to_ipython_kernel(self, client, code):
         stream_text = ''
         execute_result = None
         msg_idle = False
@@ -214,9 +212,7 @@ class BufferedKernelBase(Kernel):
         #     self.send_kernel_info = True
         super(BufferedKernelBase, self).kernel_info_request(stream, ident, parent)
 
-    def _load_env(self, client):
-        env = self._get_env_request(client)
-
+    def _load_env(self, env):
         summarize = env.get(SUMMARIZE_KEY, '')
         self.log.debug("lc_wrapper = " + summarize)
         summarize_pattern = re.compile(r'^([0-9])*:([0-9])*:([0-9])*:([0-9])*$')
@@ -280,13 +276,22 @@ class BufferedKernelBase(Kernel):
             self.log.debug(">>>> lc_wrapper_regex: " + str(e))
 
 
-    def is_summarize_on(self, code):
+    def is_summarize_on(self, code, env):
+        force = None
+        if FORCE_SUMMARIZE_KEY in env:
+            force_text = env[FORCE_SUMMARIZE_KEY].strip().lower()
+            if force_text == 'on':
+                force = True
+            elif force_text == 'off':
+                force = False
         regx = r'^\s*!!'
         m = re.match(regx, code, re.M)
         if m:
-            return True, code[m.end():]
+            return (force if force is not None else True,
+                    code[m.end():])
         else:
-            return False, code
+            return (force if force is not None else False,
+                    code)
 
     def buff_init(self):
         self.summarize_log_buff = []
@@ -545,10 +550,11 @@ class BufferedKernelBase(Kernel):
                    allow_stdin=False):
         if not silent:
             self.code = code
-            self.summarize_on, new_code = self.is_summarize_on(code)
+            env = self._get_env_request(self.kc)
+            self.summarize_on, new_code = self.is_summarize_on(code, env)
             if self.summarize_on:
                 self.init_summarize()
-                self._load_env(self.kc)
+                self._load_env(env)
                 if not self.log_history_file_path is None:
                     self.log_buff_append(u'{}\n'.format(self.log_history_file_path))
                 self.log_buff_append(u'{}\n\n'.format(code))  # code
