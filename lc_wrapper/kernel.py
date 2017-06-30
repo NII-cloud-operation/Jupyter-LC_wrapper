@@ -217,8 +217,8 @@ class BufferedKernelBase(Kernel):
                 if m:
                     config[m.group(1)] = m.group(2)
                 else:
-                    self.log.warning('Unexpected line: {}'.format(l))
-        for k, v in env:
+                    self.log.warning('Unexpected line: {} at {}'.format(l, config_path))
+        for k, v in env.items():
             config[k] = v
         return config
 
