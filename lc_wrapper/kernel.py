@@ -145,7 +145,8 @@ class BufferedKernelBase(Kernel):
             return
         if code is None:
             return
-        text = ''
+        stream_text = ''
+        execute_result = None
         msg_idle = False
         msg_execute_reply = False
         msg_id = client.execute(code)
@@ -189,12 +190,12 @@ class BufferedKernelBase(Kernel):
                         pass
                     else:
                         if content['name'] == 'stdout':
-                            text = content['text']
+                            stream_text += content['text']
                 except Exception as e:
                     self.log.debug(e)
             elif msg_type == 'execute_result':
-                text = content['data'].get('text/plain', '')
-        return text
+                execute_result = content['data'].get('text/plain', '')
+        return execute_result if execute_result is not None and stream_text
 
     def get_notebook_path(self, client=None):
         return getcwd()
