@@ -123,12 +123,6 @@ class BufferedKernelBase(Kernel):
         self.log.debug('close_log_file: self.log_file_object = None')
         self.log_file_object = None
 
-    def is_log_file_alive(self):
-        if not self.log_file_object is None:
-            return True
-        else:
-            return False
-
     def _init_log(self):
         self.file_full_path = None
         self.log_file_object = None
