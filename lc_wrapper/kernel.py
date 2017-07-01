@@ -406,7 +406,7 @@ class BufferedKernelBase(Kernel):
         self.save_msg_type = None
         self._init_log()
 
-    def output_hook_summarize(self, msg=None):
+    def _output_hook_summarize(self, msg=None):
         self.log.debug('\niopub msg is')
         self.log.debug(msg)
         msg_type = msg['header']['msg_type']
@@ -476,7 +476,7 @@ class BufferedKernelBase(Kernel):
             self.log_buff_append(content['traceback'])
             # self.session.send(self.iopub_socket, 'error', content, self._parent_header)
 
-    def reply_hook_summarize(self, msg_id, timeout=None):
+    def _reply_hook_summarize(self, msg_id, timeout=None):
         """Receive and return the reply for a given request"""
         if timeout is not None:
             deadline = monotonic() + timeout
@@ -569,8 +569,8 @@ class BufferedKernelBase(Kernel):
                     self.log_buff_append(u'{}\n'.format(self.log_history_file_path))
                 self.log_buff_append(u'{}\n\n'.format(code))  # code
                 stdin_hook = self._stdin_hook_default
-                output_hook = self.output_hook_summarize
-                reply_hook = self.reply_hook_summarize
+                output_hook = self._output_hook_summarize
+                reply_hook = self._reply_hook_summarize
             else:
                 stdin_hook = None
                 output_hook = self._output_hook_default
