@@ -225,7 +225,7 @@ class BufferedKernelBase(Kernel):
     def _load_env(self, env):
         summarize = env.get(SUMMARIZE_KEY, '')
         self.log.debug("lc_wrapper = " + summarize)
-        summarize_pattern = re.compile(r'^([0-9])*:([0-9])*:([0-9])*:([0-9])*$')
+        summarize_pattern = re.compile(r'^([0-9]*):([0-9]*):([0-9]*):([0-9]*)$')
         summarize_params = summarize_pattern.match(summarize)
         if summarize_params is not None and len(summarize_params.group(1)) != 0:
             self.summarize_start_lines = int(summarize_params.group(1))
