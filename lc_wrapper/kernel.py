@@ -383,6 +383,16 @@ class BufferedKernelBase(Kernel):
     def close_files(self):
         self.log.debug('>>>>> close_files')
         if hasattr(self, "summarize_on") and self.summarize_on:
+            self.log_buff_append('\n\n')
+            for result in self.last_results:
+                if result['msg_type'] == 'error':
+                    self.log_buff_append(result['content']['traceback'])
+                elif 'data' in result['content']:
+                    data = result['content']['data']
+                    self.log_buff_append(data['text/plain'] \
+                                         if 'text/plain' in data else \
+                                         'No text/plain data\n')
+                self.log_buff_append('\n')
             self.block_messages = True
 
             self._log_buff_flush(force=True)
@@ -402,11 +412,11 @@ class BufferedKernelBase(Kernel):
         self.count = 0
         self.start_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
         self.end_time = ''
-        self.is_error = False
         self.save_msg_type = None
+        self.last_results = []
         self._init_log()
 
-    def output_hook_summarize(self, msg=None):
+    def _output_hook_summarize(self, msg=None):
         self.log.debug('\niopub msg is')
         self.log.debug(msg)
         msg_type = msg['header']['msg_type']
@@ -469,14 +479,17 @@ class BufferedKernelBase(Kernel):
                     stream_content = {'name': 'stdout', 'text': stream_text}
                 self.send_response(self.iopub_socket, 'stream', stream_content)
         elif msg_type in ('display_data', 'execute_result'):
-            execute_result = {'data': content['data'], 'execution_count': self.execution_count, 'metadata':{}}
+            execute_result = content.copy()
+            execute_result['execution_count'] = self.execution_count
+            self.last_results.append({'msg_type': msg_type, 'content': execute_result})
             self.send_response(self.iopub_socket, msg_type, execute_result)
         elif msg_type == 'error':
-            self.is_error = True
-            self.log_buff_append(content['traceback'])
-            # self.session.send(self.iopub_socket, 'error', content, self._parent_header)
+            error_result = content.copy()
+            error_result['execution_count'] = self.execution_count
+            self.last_results.append({'msg_type': msg_type, 'content': error_result})
+            self.send_response(self.iopub_socket, msg_type, error_result)
 
-    def reply_hook_summarize(self, msg_id, timeout=None):
+    def _reply_hook_summarize(self, msg_id, timeout=None):
         """Receive and return the reply for a given request"""
         if timeout is not None:
             deadline = monotonic() + timeout
@@ -502,15 +515,6 @@ class BufferedKernelBase(Kernel):
         content = reply['content']
         content['execution_count'] = self.execution_count
 
-        if content['status'] == 'ok':
-            self.is_error = False
-        else:
-            self.is_error = True
-            error_content = content
-            error_content['execution_count'] = self.execution_count
-            if self.summarize_on:
-                self.log_buff_append(content['traceback'])
-
         self.close_files()
         if self.save_msg_type == 'stream':
             self.send_clear_content_msg()
@@ -529,9 +533,19 @@ class BufferedKernelBase(Kernel):
 
             stream_content = {'name': 'stdout', 'text': stream_text}
             self.send_response(self.iopub_socket, 'stream', stream_content)
-        if self.is_error:
-            self.session.send(self.iopub_socket, 'error', error_content, self._parent_header,
-                                ident=None, buffers=None, track=False, header=None, metadata=None)
+
+            # Send exeuction result again because last result can be cleared
+            for result in self.last_results:
+                self.session.send(self.iopub_socket,
+                                  result['msg_type'],
+                                  result['content'],
+                                  self._parent_header,
+                                  ident=None,
+                                  buffers=None,
+                                  track=False,
+                                  header=None,
+                                  metadata=None)
+            self.last_results = []
         return content
 
     def execute_request(self, stream, ident, parent):
@@ -569,8 +583,8 @@ class BufferedKernelBase(Kernel):
                     self.log_buff_append(u'{}\n'.format(self.log_history_file_path))
                 self.log_buff_append(u'{}\n\n'.format(code))  # code
                 stdin_hook = self._stdin_hook_default
-                output_hook = self.output_hook_summarize
-                reply_hook = self.reply_hook_summarize
+                output_hook = self._output_hook_summarize
+                reply_hook = self._reply_hook_summarize
             else:
                 stdin_hook = None
                 output_hook = self._output_hook_default
