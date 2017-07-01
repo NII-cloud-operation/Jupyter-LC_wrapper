@@ -44,9 +44,6 @@ ENV_LOG_HISTORY_KEY = 'lc_wrapper_uuid'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
 FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
 
-LOG_HISTORY_KEY_LEVEL1 = 'lc_cell_data'
-LOG_HISTORY_KEY_LEVEL2 = 'lc_cell_meme'
-
 IPYTHON_DEFAULT_PATTERN_FILE = 'lc_wrapper_regex.txt'
 IPYTHON_DEFAULT_PATTERN = '''ERROR|error|Error|Panic|panic|Invalid|invalid|Warning|warning|Bad|bad
 (Not|not) (Found|found)
@@ -244,18 +241,13 @@ class BufferedKernelBase(Kernel):
         else:
             self.summarize_footer_lines = 1
 
-        try:
-            cell_log_id = env[ENV_LOG_HISTORY_KEY]
-            if len(cell_log_id) > 0:
-                self.log_history_file_path = os.path.join(self.log_path, cell_log_id, cell_log_id + u'.json')
-                self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
-            else:
-                self.log_history_file_path = None
-        except Exception:
-            # self.log_history_file_path = None
-            self.log.debug('>>>>> exception history file path: ' + str(self.log_history_file_path))
-        finally:
-            self.log_history_data, self.log_history_text = self._read_log_history_file()
+        cell_log_id = env.get(ENV_LOG_HISTORY_KEY, None)
+        if cell_log_id is not None:
+            # Overwrite log history file name
+            self.log_history_file_path = os.path.join(self.log_path,
+                                                      cell_log_id,
+                                                      cell_log_id + u'.json')
+        self.log_history_data, self.log_history_text = self._read_log_history_file()
 
         self.repatter = []
         try:
@@ -521,26 +513,29 @@ class BufferedKernelBase(Kernel):
             self.last_results = []
         return content
 
-    def execute_request(self, stream, ident, parent):
-        self.save_parent = parent
-        self.log.debug('parent')
-        self.log.debug(self.save_parent)
+    def _get_cell_id(self, parent):
+        if 'content' not in parent:
+            return None
+        content = parent['content']
+        if 'lc_cell_data' not in content:
+            return None
+        lc_cell_data = content['lc_cell_data']
+        if 'lc_cell_meme' not in lc_cell_data:
+            return None
+        lc_cell_meme = lc_cell_data['lc_cell_meme']
+        if 'current' not in lc_cell_meme:
+            return None
+        return lc_cell_meme['current']
 
-        # First: this function executes
-        # Second: get_env executes
-        try:
-            cell_log_id = parent[u'content'].get(LOG_HISTORY_KEY_LEVEL1).get(LOG_HISTORY_KEY_LEVEL2).get('current')
-        except Exception:
-            self.log_history_file_path = None
-            self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
+    def execute_request(self, stream, ident, parent):
+        cell_log_id = self._get_cell_id(parent)
+        if cell_log_id is not None:
+            self.log_history_file_path = os.path.join(self.log_path,
+                                                      cell_log_id,
+                                                      cell_log_id + u'.json')
         else:
-            if cell_log_id:
-                self.log_history_file_path = os.path.join(self.log_path, cell_log_id, cell_log_id + u'.json')
-            else:
-                self.log_history_file_path = None
-            self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
-        finally:
-            self.log_history_data, self.log_history_text = self._read_log_history_file()
+            self.log_history_file_path = None
+        self.log_history_data, self.log_history_text = self._read_log_history_file()
         super(BufferedKernelBase, self).execute_request(stream, ident, parent)
 
     def do_execute(self, code, silent, store_history=True, user_expressions=None,
