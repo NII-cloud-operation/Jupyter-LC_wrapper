@@ -104,6 +104,7 @@ class BufferedKernelBase(Kernel):
 
         if not msg is None:
             self.log_file_object.write(msg)
+            self.file_size = self.log_file_object.tell()
 
     def open_log_file(self, path):
         self.log.debug('>>>>> open_log_file')
@@ -127,15 +128,6 @@ class BufferedKernelBase(Kernel):
         self.file_full_path = None
         self.log_file_object = None
         self.file_size = 0
-        self.file_lines = 0
-
-    def update_file_property(self, closed=False):
-        if not closed:
-            self.file_size = self.log_file_object.tell()
-            # self.file_lines = sum(1 for line in self.log_file_object)
-        else:
-            self.file_size = os.path.getsize(self.file_full_path)
-            self.file_lines = sum(1 for line in open(self.file_full_path))
 
     def send_code_to_ipython_kernel(self, client, code):
         stream_text = ''
@@ -362,8 +354,7 @@ class BufferedKernelBase(Kernel):
                'path': self.file_full_path,
                'start': self.start_time,
                'end': self.end_time,
-               'size': self.file_size,
-               'lines': self.file_lines}
+               'size': self.file_size}
         if dict is None:
             dict = []
         dict.append(log)
@@ -397,7 +388,6 @@ class BufferedKernelBase(Kernel):
 
             self._log_buff_flush(force=True)
             self.close_log_file()
-            self.update_file_property(closed=True)
             self.end_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
             #save log file path
             self.write_log_history_file(self.log_history_file_path, self.data)
@@ -462,7 +452,6 @@ class BufferedKernelBase(Kernel):
                 else:
                     self.save_msg_type = 'stream'
                     self._log_buff_flush()
-                    self.update_file_property()
 
                     self.send_clear_content_msg()
 
@@ -522,7 +511,7 @@ class BufferedKernelBase(Kernel):
             stream_text = u'{}'.format(self.log_history_text)
             stream_text += u'start time: {}\n'.format(self.start_time)
             stream_text += u'end time: {}\n'.format(self.end_time)
-            stream_text += u'Output Size(byte): {}, Lines: {}, Path: {}\n'.format(self.file_size, self.file_lines, self.file_full_path)
+            stream_text += u'Output Size(byte): {}, Path: {}\n'.format(self.file_size, self.file_full_path)
             stream_text += u'{} keyword matched or stderr happened\n\n'.format(len(self.keyword_buff))
             stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
             if len(self.keyword_buff) > 0:
