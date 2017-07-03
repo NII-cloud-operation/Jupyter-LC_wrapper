@@ -25,16 +25,23 @@ class ExecutionInfo(object):
         self.keyword_buff_size = keyword_buff_size
 
     def to_stream(self):
+        return self.to_stream_header() + self.to_stream_footer()
+
+    def to_stream_header(self):
         stream_text = u''
         if self.log_path is not None:
             stream_text += u'path: {}\n'.format(self.log_path)
         stream_text += u'start time: {}\n'.format(self.start_time)
+        return stream_text
+
+    def to_stream_footer(self):
+        stream_text = u''
         if self.end_time is not None:
             stream_text += u'end time: {}\n'.format(self.end_time)
         stream_text += u'output size: {} bytes\n'.format(self.file_size)
         if self.keyword_buff_size is not None:
             stream_text += u'{} chunks with matched keywords or errors\n'.format(self.keyword_buff_size)
-        return stream_text + u'\n'
+        return stream_text
 
     def to_log(self):
         log = {'code': self.code,

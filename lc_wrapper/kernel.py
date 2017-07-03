@@ -330,7 +330,7 @@ class BufferedKernelBase(Kernel):
                 data = json.load(f)
             log_history_text = u''
             for log in data:
-                log_history_text += parse_execution_info_log(log).to_stream()
+                log_history_text += parse_execution_info_log(log).to_stream() + u'\n'
             return data, log_history_text
         else:
             return [], u''
@@ -354,7 +354,8 @@ class BufferedKernelBase(Kernel):
     def close_files(self):
         self.log.debug('>>>>> close_files')
         if hasattr(self, "summarize_on") and self.summarize_on:
-            self.log_buff_append('\n\n')
+            self.exec_info.finished(len(self.keyword_buff))
+            self.log_buff_append(u'\n----\n{}----\n'.format(self.exec_info.to_stream_footer()))
             for result in self.last_results:
                 if result['msg_type'] == 'error':
                     self.log_buff_append(result['content']['traceback'])
@@ -368,7 +369,6 @@ class BufferedKernelBase(Kernel):
 
             self._log_buff_flush(force=True)
             self.close_log_file()
-            self.exec_info.finished(len(self.keyword_buff))
             #save log file path
             self._write_log_history_file(self.log_history_data)
 
@@ -434,7 +434,7 @@ class BufferedKernelBase(Kernel):
                     self.send_clear_content_msg()
 
                     stream_text = u'{}'.format(self.log_history_text)
-                    stream_text += self.exec_info.to_stream()
+                    stream_text += self.exec_info.to_stream() + u'----\n'
 
                     stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
                     if len(self.keyword_buff) > 0:
@@ -487,7 +487,7 @@ class BufferedKernelBase(Kernel):
             self.send_clear_content_msg()
 
             stream_text = u'{}'.format(self.log_history_text)
-            stream_text += self.exec_info.to_stream()
+            stream_text += self.exec_info.to_stream() + u'----\n'
 
             stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
             if len(self.keyword_buff) > 0:
@@ -548,8 +548,9 @@ class BufferedKernelBase(Kernel):
                 self.init_summarize()
                 self._load_env(env)
                 if not self.log_history_file_path is None:
-                    self.log_buff_append(u'{}\n'.format(self.log_history_file_path))
-                self.log_buff_append(u'{}\n\n'.format(code))  # code
+                    self.log_buff_append(u'{}\n----\n'.format(self.log_history_file_path))
+                self.log_buff_append(u'{}\n----\n'.format(code))  # code
+                self.log_buff_append(self.exec_info.to_stream() + u'----\n')
                 stdin_hook = self._stdin_hook_default
                 output_hook = self._output_hook_summarize
                 reply_hook = self._reply_hook_summarize
