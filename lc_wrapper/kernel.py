@@ -35,6 +35,7 @@ try:
     from os import getcwdu as getcwd  # Python 2
 except ImportError:
     from os import getcwd  # Python 3
+import pickle
 import dateutil
 from .log import ExecutionInfo, parse_execution_info_log
 
@@ -356,15 +357,8 @@ class BufferedKernelBase(Kernel):
         if hasattr(self, "summarize_on") and self.summarize_on:
             self.exec_info.finished(len(self.keyword_buff))
             self.log_buff_append(u'\n----\n{}----\n'.format(self.exec_info.to_stream_footer()))
-            for result in self.last_results:
-                if result['msg_type'] == 'error':
-                    self.log_buff_append(result['content']['traceback'])
-                elif 'data' in result['content']:
-                    data = result['content']['data']
-                    self.log_buff_append(data['text/plain'] \
-                                         if 'text/plain' in data else \
-                                         'No text/plain data\n')
-                self.log_buff_append('\n')
+            for result in self.result_files:
+                self.log_buff_append(u'result: {}\n'.format(result))
             self.block_messages = True
 
             self._log_buff_flush(force=True)
@@ -381,8 +375,21 @@ class BufferedKernelBase(Kernel):
         self.summarize_footer_lines = 1
         self.count = 0
         self.save_msg_type = None
-        self.last_results = []
+        self.result_files = []
         self._init_log()
+
+    def _store_result(self, result):
+        if self.file_full_path is None:
+            self.log.error('Log file already closed. Skip to store results')
+            return
+        log_dir, log_name = os.path.split(self.file_full_path)
+        log_name_body, _ = os.path.splitext(log_name)
+        result_file = os.path.join(log_dir,
+                                   u'{}-{}.pkl'.format(log_name_body,
+                                                       len(self.result_files)))
+        with open(result_file, 'wb') as f:
+            pickle.dump(result, f)
+        self.result_files.append(result_file)
 
     def _output_hook_summarize(self, msg=None):
         self.log.debug('\niopub msg is')
@@ -448,12 +455,12 @@ class BufferedKernelBase(Kernel):
         elif msg_type in ('display_data', 'execute_result'):
             execute_result = content.copy()
             execute_result['execution_count'] = self.execution_count
-            self.last_results.append({'msg_type': msg_type, 'content': execute_result})
+            self._store_result({'msg_type': msg_type, 'content': execute_result})
             self.send_response(self.iopub_socket, msg_type, execute_result)
         elif msg_type == 'error':
             error_result = content.copy()
             error_result['execution_count'] = self.execution_count
-            self.last_results.append({'msg_type': msg_type, 'content': error_result})
+            self._store_result({'msg_type': msg_type, 'content': error_result})
             self.send_response(self.iopub_socket, msg_type, error_result)
 
     def _reply_hook_summarize(self, msg_id, timeout=None):
@@ -500,17 +507,19 @@ class BufferedKernelBase(Kernel):
             self.send_response(self.iopub_socket, 'stream', stream_content)
 
             # Send exeuction result again because last result can be cleared
-            for result in self.last_results:
-                self.session.send(self.iopub_socket,
-                                  result['msg_type'],
-                                  result['content'],
-                                  self._parent_header,
-                                  ident=None,
-                                  buffers=None,
-                                  track=False,
-                                  header=None,
-                                  metadata=None)
-            self.last_results = []
+            for resultf in self.result_files:
+                with open(resultf, 'rb') as f:
+                    result = pickle.load(f)
+                    self.session.send(self.iopub_socket,
+                                      result['msg_type'],
+                                      result['content'],
+                                      self._parent_header,
+                                      ident=None,
+                                      buffers=None,
+                                      track=False,
+                                      header=None,
+                                      metadata=None)
+            self.result_files = []
         return content
 
     def _get_cell_id(self, parent):
