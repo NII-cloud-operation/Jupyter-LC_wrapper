@@ -559,7 +559,8 @@ class BufferedKernelBase(Kernel):
                 if not self.log_history_file_path is None:
                     self.log_buff_append(u'{}\n----\n'.format(self.log_history_file_path))
                 self.log_buff_append(u'{}\n----\n'.format(code))  # code
-                self.log_buff_append(self.exec_info.to_stream() + u'----\n')
+                self._log_buff_flush()
+                self.log_buff_append(self.exec_info.to_stream_header() + u'----\n')
                 stdin_hook = self._stdin_hook_default
                 output_hook = self._output_hook_summarize
                 reply_hook = self._reply_hook_summarize
