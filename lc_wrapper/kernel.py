@@ -248,6 +248,7 @@ class BufferedKernelBase(Kernel):
             self.log_history_file_path = os.path.join(self.log_path,
                                                       cell_log_id,
                                                       cell_log_id + u'.json')
+            self.log_history_id = cell_log_id
         self.log_history_data, self.log_history_text = self._read_log_history_file()
 
         self.repatter = []
@@ -544,6 +545,7 @@ class BufferedKernelBase(Kernel):
                                                       cell_log_id + u'.json')
         else:
             self.log_history_file_path = None
+        self.log_history_id = cell_log_id
         self.log_history_data, self.log_history_text = self._read_log_history_file()
         super(BufferedKernelBase, self).execute_request(stream, ident, parent)
 
@@ -556,8 +558,9 @@ class BufferedKernelBase(Kernel):
             if self.summarize_on:
                 self.init_summarize()
                 self._load_env(env)
-                if not self.log_history_file_path is None:
-                    self.log_buff_append(u'{}\n----\n'.format(self.log_history_file_path))
+                if not self.log_history_id is None:
+                    meme = {'lc_cell_meme': {'current': self.log_history_id}}
+                    self.log_buff_append(u'{}\n----\n'.format(json.dumps(meme)))
                 self.log_buff_append(u'{}\n----\n'.format(code))  # code
                 self._log_buff_flush()
                 self.log_buff_append(self.exec_info.to_stream_header() + u'----\n')
