@@ -241,6 +241,9 @@ class BufferedKernelBase(Kernel):
             self.summarize_footer_lines = int(summarize_params.group(4))
         else:
             self.summarize_footer_lines = 1
+        self.summarize_start_lines = max(self.summarize_start_lines,
+                                         self.summarize_header_lines + \
+                                         self.summarize_footer_lines + 1)
 
         cell_log_id = env.get(ENV_LOG_HISTORY_KEY, None)
         if cell_log_id is not None:
@@ -300,7 +303,7 @@ class BufferedKernelBase(Kernel):
     def buff_init(self):
         self.summarize_log_buff = []
         self.summarize_header_buff = []
-        self.summarize_footer_buff = []
+        self.summarize_last_buff = []
         self.keyword_buff = []
 
     def _log_buff_flush(self, force=False):
@@ -375,7 +378,6 @@ class BufferedKernelBase(Kernel):
         self.summarize_exec_lines = 1
         self.summarize_footer_lines = 1
         self.count = 0
-        self.save_msg_type = None
         self.result_files = []
         self._init_log()
 
@@ -391,6 +393,17 @@ class BufferedKernelBase(Kernel):
         with open(result_file, 'wb') as f:
             pickle.dump(result, f)
         self.result_files.append(result_file)
+
+    def _store_last_lines(self, content_text_list):
+        # save the last few lines
+        lines = max(self.summarize_footer_lines, self.summarize_start_lines)
+        if len(content_text_list) < lines:
+            if len(content_text_list) + len(self.summarize_last_buff) > lines:
+                del self.summarize_last_buff[:len(content_text_list)]
+            self.summarize_last_buff.extend(content_text_list)
+        else:
+            del self.summarize_last_buff[:]
+            self.summarize_last_buff.extend(content_text_list[-lines:])
 
     def _output_hook_summarize(self, msg=None):
         self.log.debug('\niopub msg is')
@@ -423,20 +436,12 @@ class BufferedKernelBase(Kernel):
                 # save the first few lines
                 if len(self.summarize_header_buff) < self.summarize_header_lines:
                     self.summarize_header_buff.extend(content_text_list)
-                # save the last few lines
-                if len(content_text_list) < self.summarize_footer_lines:
-                    if len(content_text_list) + len(self.summarize_footer_buff) > self.summarize_footer_lines:
-                        del self.summarize_footer_buff[:len(content_text_list)]
-                    self.summarize_footer_buff.extend(content_text_list)
-                else:
-                    del self.summarize_footer_buff[:]
-                    self.summarize_footer_buff.extend(content_text_list[-self.summarize_footer_lines:])
+                self._store_last_lines(content_text_list)
 
                 if self.count < self.summarize_start_lines:
                     self.count += len(content_text_list)
                     stream_content = {'name': content['name'], 'text': content['text']}
                 else:
-                    self.save_msg_type = 'stream'
                     self._log_buff_flush()
 
                     self.send_clear_content_msg()
@@ -491,36 +496,38 @@ class BufferedKernelBase(Kernel):
         content['execution_count'] = self.execution_count
 
         self.close_files()
-        if self.save_msg_type == 'stream':
-            self.send_clear_content_msg()
+        self.send_clear_content_msg()
 
-            stream_text = u'{}'.format(self.log_history_text)
-            stream_text += self.exec_info.to_stream() + u'----\n'
+        stream_text = u'{}'.format(self.log_history_text)
+        stream_text += self.exec_info.to_stream() + u'----\n'
 
+        if self.count < self.summarize_start_lines:
+            stream_text += u'\n'.join(self.summarize_last_buff)
+        else:
             stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
             if len(self.keyword_buff) > 0:
                 stream_text += u'...\n'
                 stream_text += u'\033[0;31m{}\033[0m\n'.format(u'\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]))
             stream_text += u'...\n'
-            stream_text += u'{}'.format('\n'.join(self.summarize_footer_buff[-self.summarize_footer_lines:]))
+            stream_text += u'{}'.format('\n'.join(self.summarize_last_buff[-self.summarize_footer_lines:]))
 
-            stream_content = {'name': 'stdout', 'text': stream_text}
-            self.send_response(self.iopub_socket, 'stream', stream_content)
+        stream_content = {'name': 'stdout', 'text': stream_text}
+        self.send_response(self.iopub_socket, 'stream', stream_content)
 
-            # Send exeuction result again because last result can be cleared
-            for resultf in self.result_files:
-                with open(resultf, 'rb') as f:
-                    result = pickle.load(f)
-                    self.session.send(self.iopub_socket,
-                                      result['msg_type'],
-                                      result['content'],
-                                      self._parent_header,
-                                      ident=None,
-                                      buffers=None,
-                                      track=False,
-                                      header=None,
-                                      metadata=None)
-            self.result_files = []
+        # Send exeuction result again because last result can be cleared
+        for resultf in self.result_files:
+            with open(resultf, 'rb') as f:
+                result = pickle.load(f)
+                self.session.send(self.iopub_socket,
+                                  result['msg_type'],
+                                  result['content'],
+                                  self._parent_header,
+                                  ident=None,
+                                  buffers=None,
+                                  track=False,
+                                  header=None,
+                                  metadata=None)
+        self.result_files = []
         return content
 
     def _get_cell_id(self, parent):
