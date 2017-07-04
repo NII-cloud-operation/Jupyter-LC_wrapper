@@ -22,7 +22,7 @@ except NameError:
     TimeoutError = RuntimeError
 
 from ipykernel.kernelbase import Kernel
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import os.path
 from jupyter_client.multikernelmanager import MultiKernelManager
@@ -35,16 +35,15 @@ try:
     from os import getcwdu as getcwd  # Python 2
 except ImportError:
     from os import getcwd  # Python 3
+import pickle
 import dateutil
+from .log import ExecutionInfo, parse_execution_info_log
 
 
 SUMMARIZE_KEY = 'lc_wrapper'
 ENV_LOG_HISTORY_KEY = 'lc_wrapper_uuid'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
 FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
-
-LOG_HISTORY_KEY_LEVEL1 = 'lc_cell_data'
-LOG_HISTORY_KEY_LEVEL2 = 'lc_cell_meme'
 
 IPYTHON_DEFAULT_PATTERN_FILE = 'lc_wrapper_regex.txt'
 IPYTHON_DEFAULT_PATTERN = '''ERROR|error|Error|Panic|panic|Invalid|invalid|Warning|warning|Bad|bad
@@ -79,6 +78,7 @@ class BufferedKernelBase(Kernel):
         if not os.path.exists(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE)):
             with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE), 'w') as file:
                 file.write(IPYTHON_DEFAULT_PATTERN)
+        self.exec_info = None
         self._init_log()
 
         self.log.debug('>>>>> kernel id: ' + self.kernelid)
@@ -95,6 +95,7 @@ class BufferedKernelBase(Kernel):
                 os.makedirs(path)
             file_name = now.strftime("%Y%m%d-%H%M%S") + "-%04d" % (now.microsecond // 1000)
             self.file_full_path = os.path.join(path, file_name + u'.log')
+            self.exec_info.log_path = self.file_full_path
 
         if self.log_file_object is None:
             self.log_file_object = self.open_log_file(self.file_full_path)
@@ -104,6 +105,7 @@ class BufferedKernelBase(Kernel):
 
         if not msg is None:
             self.log_file_object.write(msg)
+            self.exec_info.file_size = self.log_file_object.tell()
 
     def open_log_file(self, path):
         self.log.debug('>>>>> open_log_file')
@@ -126,16 +128,6 @@ class BufferedKernelBase(Kernel):
     def _init_log(self):
         self.file_full_path = None
         self.log_file_object = None
-        self.file_size = 0
-        self.file_lines = 0
-
-    def update_file_property(self, closed=False):
-        if not closed:
-            self.file_size = self.log_file_object.tell()
-            # self.file_lines = sum(1 for line in self.log_file_object)
-        else:
-            self.file_size = os.path.getsize(self.file_full_path)
-            self.file_lines = sum(1 for line in open(self.file_full_path))
 
     def send_code_to_ipython_kernel(self, client, code):
         stream_text = ''
@@ -231,7 +223,7 @@ class BufferedKernelBase(Kernel):
     def _load_env(self, env):
         summarize = env.get(SUMMARIZE_KEY, '')
         self.log.debug("lc_wrapper = " + summarize)
-        summarize_pattern = re.compile(r'^([0-9])*:([0-9])*:([0-9])*:([0-9])*$')
+        summarize_pattern = re.compile(r'^([0-9]*):([0-9]*):([0-9]*):([0-9]*)$')
         summarize_params = summarize_pattern.match(summarize)
         if summarize_params is not None and len(summarize_params.group(1)) != 0:
             self.summarize_start_lines = int(summarize_params.group(1))
@@ -250,18 +242,14 @@ class BufferedKernelBase(Kernel):
         else:
             self.summarize_footer_lines = 1
 
-        try:
-            cell_log_id = env[ENV_LOG_HISTORY_KEY]
-            if len(cell_log_id) > 0:
-                self.log_history_file_path = os.path.join(self.log_path, cell_log_id, cell_log_id + u'.json')
-                self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
-            else:
-                self.log_history_file_path = None
-        except Exception:
-            # self.log_history_file_path = None
-            self.log.debug('>>>>> exception history file path: ' + str(self.log_history_file_path))
-        finally:
-            self.data, self.log_history_text = self.read_log_history_file(self.log_history_file_path)
+        cell_log_id = env.get(ENV_LOG_HISTORY_KEY, None)
+        if cell_log_id is not None:
+            # Overwrite log history file name
+            self.log_history_file_path = os.path.join(self.log_path,
+                                                      cell_log_id,
+                                                      cell_log_id + u'.json')
+            self.log_history_id = cell_log_id
+        self.log_history_data, self.log_history_text = self._read_log_history_file()
 
         self.repatter = []
         try:
@@ -337,70 +325,47 @@ class BufferedKernelBase(Kernel):
             else:
                 self.keyword_buff.append(text)
 
-    def read_log_history_file(self, path):
-        self.log.debug('>>>>> read_log_history_file')
-        log_history_text = u''
-        try:
-            with open(path, 'r') as file:
-                data = json.load(file)
-        except Exception:
-            data = None
-        else:
+    def _read_log_history_file(self):
+        if self.log_history_file_path is not None and \
+           os.path.exists(self.log_history_file_path):
+            with open(self.log_history_file_path, 'r') as f:
+                data = json.load(f)
+            log_history_text = u''
             for log in data:
-                start = u'start:{}'.format(log.get('start'))
-                end = u'end:{}'.format(log.get('end'))
-                path = u'path:{}'.format(log.get('path'))
-                log_history_text += u'{}\n{}\n{}\n\n'.format(start, end, path)
-        return data, log_history_text
+                log_history_text += parse_execution_info_log(log).to_stream() + u'\n'
+            return data, log_history_text
+        else:
+            return [], u''
 
-    def write_log_history_file(self, path, dict=None):
-        self.log.debug('>>>>> write_log_history_file')
-        if path is None:
-            self.log.debug('>>>>> write_log_history_file: not executed because path is None')
+    def _write_log_history_file(self, data):
+        if self.log_history_file_path is None:
+            self.log.debug('Skipped to save log history')
             return
-        log = {'code': self.code,
-               'path': self.file_full_path,
-               'start': self.start_time,
-               'end': self.end_time,
-               'size': self.file_size,
-               'lines': self.file_lines}
-        if dict is None:
-            dict = []
-        dict.append(log)
+        data.append(self.exec_info.to_log())
 
-        pathdir = os.path.dirname(path)
+        pathdir = os.path.dirname(self.log_history_file_path)
         if not os.path.exists(pathdir):
             os.makedirs(pathdir)
-        os.symlink(self.file_full_path, os.path.join(pathdir, os.path.basename(self.file_full_path)))
-
-        with open(path, 'w') as file:
-            json.dump(dict, file)
-            if not os.path.exists(path):
-                os.makedirs(path)
-        self.log.debug('>>>>> log history file closed')
+        os.symlink(self.file_full_path,
+                   os.path.join(pathdir, os.path.basename(self.file_full_path)))
+        with open(self.log_history_file_path, 'w') as f:
+            json.dump(data, f)
+        self.log.debug('Log history saved: {}'.format(self.log_history_file_path))
         self.log_history_file_path = None
 
     def close_files(self):
         self.log.debug('>>>>> close_files')
         if hasattr(self, "summarize_on") and self.summarize_on:
-            self.log_buff_append('\n\n')
-            for result in self.last_results:
-                if result['msg_type'] == 'error':
-                    self.log_buff_append(result['content']['traceback'])
-                elif 'data' in result['content']:
-                    data = result['content']['data']
-                    self.log_buff_append(data['text/plain'] \
-                                         if 'text/plain' in data else \
-                                         'No text/plain data\n')
-                self.log_buff_append('\n')
+            self.exec_info.finished(len(self.keyword_buff))
+            self.log_buff_append(u'\n----\n{}----\n'.format(self.exec_info.to_stream_footer()))
+            for result in self.result_files:
+                self.log_buff_append(u'result: {}\n'.format(result))
             self.block_messages = True
 
             self._log_buff_flush(force=True)
             self.close_log_file()
-            self.update_file_property(closed=True)
-            self.end_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
             #save log file path
-            self.write_log_history_file(self.log_history_file_path, self.data)
+            self._write_log_history_file(self.log_history_data)
 
     def init_summarize(self):
         self.block_messages = False
@@ -410,11 +375,22 @@ class BufferedKernelBase(Kernel):
         self.summarize_exec_lines = 1
         self.summarize_footer_lines = 1
         self.count = 0
-        self.start_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
-        self.end_time = ''
         self.save_msg_type = None
-        self.last_results = []
+        self.result_files = []
         self._init_log()
+
+    def _store_result(self, result):
+        if self.file_full_path is None:
+            self.log.error('Log file already closed. Skip to store results')
+            return
+        log_dir, log_name = os.path.split(self.file_full_path)
+        log_name_body, _ = os.path.splitext(log_name)
+        result_file = os.path.join(log_dir,
+                                   u'{}-{}.pkl'.format(log_name_body,
+                                                       len(self.result_files)))
+        with open(result_file, 'wb') as f:
+            pickle.dump(result, f)
+        self.result_files.append(result_file)
 
     def _output_hook_summarize(self, msg=None):
         self.log.debug('\niopub msg is')
@@ -462,13 +438,12 @@ class BufferedKernelBase(Kernel):
                 else:
                     self.save_msg_type = 'stream'
                     self._log_buff_flush()
-                    self.update_file_property()
 
                     self.send_clear_content_msg()
 
                     stream_text = u'{}'.format(self.log_history_text)
-                    stream_text += u'start time: {}\n'.format(self.start_time)
-                    stream_text += u'Output Size(byte): {}, Path: {}\n\n'.format(self.file_size, self.file_full_path)
+                    stream_text += self.exec_info.to_stream() + u'----\n'
+
                     stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
                     if len(self.keyword_buff) > 0:
                         stream_text += u'...\n'
@@ -481,12 +456,12 @@ class BufferedKernelBase(Kernel):
         elif msg_type in ('display_data', 'execute_result'):
             execute_result = content.copy()
             execute_result['execution_count'] = self.execution_count
-            self.last_results.append({'msg_type': msg_type, 'content': execute_result})
+            self._store_result({'msg_type': msg_type, 'content': execute_result})
             self.send_response(self.iopub_socket, msg_type, execute_result)
         elif msg_type == 'error':
             error_result = content.copy()
             error_result['execution_count'] = self.execution_count
-            self.last_results.append({'msg_type': msg_type, 'content': error_result})
+            self._store_result({'msg_type': msg_type, 'content': error_result})
             self.send_response(self.iopub_socket, msg_type, error_result)
 
     def _reply_hook_summarize(self, msg_id, timeout=None):
@@ -520,10 +495,8 @@ class BufferedKernelBase(Kernel):
             self.send_clear_content_msg()
 
             stream_text = u'{}'.format(self.log_history_text)
-            stream_text += u'start time: {}\n'.format(self.start_time)
-            stream_text += u'end time: {}\n'.format(self.end_time)
-            stream_text += u'Output Size(byte): {}, Lines: {}, Path: {}\n'.format(self.file_size, self.file_lines, self.file_full_path)
-            stream_text += u'{} keyword matched or stderr happened\n\n'.format(len(self.keyword_buff))
+            stream_text += self.exec_info.to_stream() + u'----\n'
+
             stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
             if len(self.keyword_buff) > 0:
                 stream_text += u'...\n'
@@ -535,53 +508,62 @@ class BufferedKernelBase(Kernel):
             self.send_response(self.iopub_socket, 'stream', stream_content)
 
             # Send exeuction result again because last result can be cleared
-            for result in self.last_results:
-                self.session.send(self.iopub_socket,
-                                  result['msg_type'],
-                                  result['content'],
-                                  self._parent_header,
-                                  ident=None,
-                                  buffers=None,
-                                  track=False,
-                                  header=None,
-                                  metadata=None)
-            self.last_results = []
+            for resultf in self.result_files:
+                with open(resultf, 'rb') as f:
+                    result = pickle.load(f)
+                    self.session.send(self.iopub_socket,
+                                      result['msg_type'],
+                                      result['content'],
+                                      self._parent_header,
+                                      ident=None,
+                                      buffers=None,
+                                      track=False,
+                                      header=None,
+                                      metadata=None)
+            self.result_files = []
         return content
 
-    def execute_request(self, stream, ident, parent):
-        self.save_parent = parent
-        self.log.debug('parent')
-        self.log.debug(self.save_parent)
+    def _get_cell_id(self, parent):
+        if 'content' not in parent:
+            return None
+        content = parent['content']
+        if 'lc_cell_data' not in content:
+            return None
+        lc_cell_data = content['lc_cell_data']
+        if 'lc_cell_meme' not in lc_cell_data:
+            return None
+        lc_cell_meme = lc_cell_data['lc_cell_meme']
+        if 'current' not in lc_cell_meme:
+            return None
+        return lc_cell_meme['current']
 
-        # First: this function executes
-        # Second: get_env executes
-        try:
-            cell_log_id = parent[u'content'].get(LOG_HISTORY_KEY_LEVEL1).get(LOG_HISTORY_KEY_LEVEL2).get('current')
-        except Exception:
-            self.log_history_file_path = None
-            self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
+    def execute_request(self, stream, ident, parent):
+        cell_log_id = self._get_cell_id(parent)
+        if cell_log_id is not None:
+            self.log_history_file_path = os.path.join(self.log_path,
+                                                      cell_log_id,
+                                                      cell_log_id + u'.json')
         else:
-            if cell_log_id:
-                self.log_history_file_path = os.path.join(self.log_path, cell_log_id, cell_log_id + u'.json')
-            else:
-                self.log_history_file_path = None
-            self.log.debug('>>>>> history file path: ' + str(self.log_history_file_path))
-        finally:
-            self.data, self.log_history_text = self.read_log_history_file(self.log_history_file_path)
+            self.log_history_file_path = None
+        self.log_history_id = cell_log_id
+        self.log_history_data, self.log_history_text = self._read_log_history_file()
         super(BufferedKernelBase, self).execute_request(stream, ident, parent)
 
     def do_execute(self, code, silent, store_history=True, user_expressions=None,
                    allow_stdin=False):
+        self.exec_info = ExecutionInfo(code)
         if not silent:
-            self.code = code
             env = self._get_config(self.kc)
             self.summarize_on, new_code = self.is_summarize_on(code, env)
             if self.summarize_on:
                 self.init_summarize()
                 self._load_env(env)
-                if not self.log_history_file_path is None:
-                    self.log_buff_append(u'{}\n'.format(self.log_history_file_path))
-                self.log_buff_append(u'{}\n\n'.format(code))  # code
+                if not self.log_history_id is None:
+                    meme = {'lc_cell_meme': {'current': self.log_history_id}}
+                    self.log_buff_append(u'{}\n----\n'.format(json.dumps(meme)))
+                self.log_buff_append(u'{}\n----\n'.format(code))  # code
+                self._log_buff_flush()
+                self.log_buff_append(self.exec_info.to_stream_header() + u'----\n')
                 stdin_hook = self._stdin_hook_default
                 output_hook = self._output_hook_summarize
                 reply_hook = self._reply_hook_summarize
@@ -825,16 +807,13 @@ class BufferedKernelBase(Kernel):
                     break
             except KeyboardInterrupt:
                 # Ctrl-C shouldn't crash the kernel
-                self.log.error("KeyboardInterrupt caught in execute_interactive")
+                self.log.info("KeyboardInterrupt caught in execute_interactive")
                 self.km.interrupt_kernel(self.kernelid)
 
                 # this timer fire when the ipython kernel didnot interrupt within 5.0 sec.
                 self.timer = threading.Timer(5.0, self.close_files)
                 self.log.debug('>>>>> close files: timer fired')
                 self.timer.start()
-                continue
-            except:
-                self.log.error("a exception caught in execute_interactive")
                 continue
 
         # output is done, get the reply
