@@ -45,7 +45,7 @@ ENV_LOG_HISTORY_KEY = 'lc_wrapper_uuid'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
 FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
 
-IPYTHON_DEFAULT_PATTERN_FILE = 'lc_wrapper_regex.txt'
+IPYTHON_DEFAULT_PATTERN_FILE = '.lc_wrapper_regex.txt'
 IPYTHON_DEFAULT_PATTERN = '''ERROR|error|Error|Panic|panic|Invalid|invalid|Warning|warning|Bad|bad
 (Not|not) (Found|found)
 (Device)? not ready
@@ -76,8 +76,8 @@ class BufferedKernelBase(Kernel):
         self.notebook_path = self.get_notebook_path(self.kc)
         self.log_path = os.path.join(self.notebook_path, u'.log')
         if not os.path.exists(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE)):
-            with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE), 'w') as file:
-                file.write(IPYTHON_DEFAULT_PATTERN)
+            with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE), 'w') as f:
+                f.write(IPYTHON_DEFAULT_PATTERN)
         self.exec_info = None
         self._init_log()
 
@@ -255,18 +255,15 @@ class BufferedKernelBase(Kernel):
         self.log_history_data, self.log_history_text = self._read_log_history_file()
 
         self.repatter = []
-        try:
-            text = env[IGNORE_SUMMARIZE_KEY]
-        except:
-            text = None
-        try:
-            if text is None or len(text) == 0:
-                self.repatter = []
-            elif 'file:' in text:
-                file_name = text[text.rfind('find:')+6:].strip()
-                if file_name == 'default':
-                    file_name = IPYTHON_DEFAULT_PATTERN_FILE
-                file_path = os.path.join(self.notebook_path, file_name)
+        text = env.get(IGNORE_SUMMARIZE_KEY, 'file:default')
+        if text is None or len(text) == 0:
+            pass
+        elif 'file:' in text:
+            file_name = text[text.rfind('find:')+6:].strip()
+            if file_name == 'default':
+                file_name = IPYTHON_DEFAULT_PATTERN_FILE
+            file_path = os.path.join(self.notebook_path, file_name)
+            if os.path.exists(file_path):
                 with open(file_path, 'r') as file:
                     patterns = file.readlines()
 
@@ -274,14 +271,20 @@ class BufferedKernelBase(Kernel):
                     for patt in patterns:
                         patt = patt.strip()
                         self.log.debug(patt)
-                        self.repatter.append(re.compile(patt))
+                        try:
+                            self.repatter.append(re.compile(patt))
+                        except Exception as e:
+                            self.keyword_buff_append(u'error : ' + unicode(e))
+                            self.log.warning("lc_wrapper_regex: " + str(e))
             else:
+                self.keyword_buff_append(u'error : ' + u'Not found {}'.format(file_path))
+                self.log.warning('lc_wrapper_regex: ' + u'Not found {}'.format(file_path))
+        else:
+            try:
                 self.repatter.append(re.compile(text))
-        except Exception as e:
-            self.repatter = []
-            self.keyword_buff_append(u'error : ' + unicode(e))
-            self.log.debug(">>>> lc_wrapper_regex: " + str(e))
-
+            except Exception as e:
+                self.keyword_buff_append(u'error : ' + unicode(e))
+                self.log.warning("lc_wrapper_regex: " + str(e))
 
     def is_summarize_on(self, code, env):
         force = None
