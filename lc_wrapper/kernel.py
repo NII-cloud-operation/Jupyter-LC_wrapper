@@ -255,7 +255,7 @@ class BufferedKernelBase(Kernel):
         self.log_history_data, self.log_history_text = self._read_log_history_file()
 
         self.repatter = []
-        text = env.get(IGNORE_SUMMARIZE_KEY, None)
+        text = env.get(IGNORE_SUMMARIZE_KEY, 'file:default')
         if text is None or len(text) == 0:
             pass
         elif 'file:' in text:
