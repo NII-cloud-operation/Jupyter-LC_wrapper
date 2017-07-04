@@ -45,7 +45,7 @@ ENV_LOG_HISTORY_KEY = 'lc_wrapper_uuid'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
 FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
 
-IPYTHON_DEFAULT_PATTERN_FILE = 'lc_wrapper_regex.txt'
+IPYTHON_DEFAULT_PATTERN_FILE = '.lc_wrapper_regex.txt'
 IPYTHON_DEFAULT_PATTERN = '''ERROR|error|Error|Panic|panic|Invalid|invalid|Warning|warning|Bad|bad
 (Not|not) (Found|found)
 (Device)? not ready
