@@ -349,7 +349,9 @@ class BufferedKernelBase(Kernel):
         pathdir = os.path.dirname(self.log_history_file_path)
         if not os.path.exists(pathdir):
             os.makedirs(pathdir)
-        os.symlink(self.file_full_path,
+        log_full_dir, log_filename = os.path.split(self.file_full_path)
+        log_full_dir, log_dirname = os.path.split(log_full_dir)
+        os.symlink(os.path.join('..', log_dirname, log_filename),
                    os.path.join(pathdir, os.path.basename(self.file_full_path)))
         with open(self.log_history_file_path, 'w') as f:
             json.dump(data, f)
