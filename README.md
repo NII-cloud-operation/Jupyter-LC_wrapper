@@ -15,7 +15,7 @@ The lc_wrapper has several features shown below:
 
 * Jupyter Notebook 4.2.x
 * Python2.7
-* (Option) Jupyter-LC_nblineage 
+* (Option) Jupyter-LC_nblineage
 
 ## How to Install
 #### Install Jupyter-LC_wrapper
@@ -87,10 +87,10 @@ Also you can use `lc_wrapper_force` environment variable to enable/disable the m
 
 ```
 %env lc_wrapper=s:h:e:f  
-s : Number of lines before the summary function starts. (default s=1)
-h : Number of lines at the head of the output. (default h=1)
-e : Maximum number of lines of messages sent in one stream. (default e=1)
-f : Number of lines at the tail of the output. (default f=1)
+s : Summary starts when # of output lines exceed 's' (default s=50)
+h : Summary displays the first h lines and max 2 x h error lines. (default h=20)
+e : Max # of output lines in progress. (default e=1)
+f : Summary displays the last f lines (default f=20)
 
 Example:  
 
@@ -169,7 +169,7 @@ Output Size(byte): 305, Lines: 18, Path: /notebooks/.log/20170426/20170426-14203
 %env lc_wrapper_regex=y
 y = keywords : If check two words word1 and word2, write with a separator '|' such as y = word1|word2.
 y = file:filename : If use regular expression, write with a suffix 'file:' such as y = file:xxxxx.txt.
-The file will be saved in the same directory as notebooks. 
+The file will be saved in the same directory as notebooks.
 In the file, one regular expression can be written on one line, and multiple lines can be described.
 
 
