@@ -227,20 +227,12 @@ class BufferedKernelBase(Kernel):
         summarize_params = summarize_pattern.match(summarize)
         if summarize_params is not None and len(summarize_params.group(1)) != 0:
             self.summarize_start_lines = int(summarize_params.group(1))
-        else:
-            self.summarize_start_lines = 1
         if summarize_params is not None and len(summarize_params.group(2)) != 0:
             self.summarize_header_lines = int(summarize_params.group(2))
-        else:
-            self.summarize_header_lines = 1
         if summarize_params is not None and len(summarize_params.group(3)) != 0:
             self.summarize_exec_lines = int(summarize_params.group(3))
-        else:
-            self.summarize_exec_lines = 1
         if summarize_params is not None and len(summarize_params.group(4)) != 0:
             self.summarize_footer_lines = int(summarize_params.group(4))
-        else:
-            self.summarize_footer_lines = 1
         self.summarize_start_lines = max(self.summarize_start_lines,
                                          self.summarize_header_lines + \
                                          self.summarize_footer_lines + 1)
@@ -378,10 +370,10 @@ class BufferedKernelBase(Kernel):
     def init_summarize(self):
         self.block_messages = False
         self.buff_init()
-        self.summarize_start_lines = 1
-        self.summarize_header_lines = 1
+        self.summarize_start_lines = 50
+        self.summarize_header_lines = 20
         self.summarize_exec_lines = 1
-        self.summarize_footer_lines = 1
+        self.summarize_footer_lines = 20
         self.count = 0
         self.result_files = []
         self._init_log()
