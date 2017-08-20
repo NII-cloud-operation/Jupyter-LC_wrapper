@@ -54,7 +54,8 @@ interrupt(ed)?|abort(ed)?|stop(ped)?
 insecure|inaccessible|Forbidden|forbidden|Denied|denied
 Unauthorised|unauthorised|Unauthorized|unauthorized
 (No|no|Low|low) (.+ )?(Capacity|capacity|Space|space)
-has (encountered|stopped)'''
+has (encountered|stopped)
+is not'''
 
 
 class BufferedKernelBase(Kernel):
