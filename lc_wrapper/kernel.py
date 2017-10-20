@@ -531,7 +531,8 @@ class BufferedKernelBase(Kernel):
         self.close_files()
         self.send_clear_content_msg()
 
-        stream_text = u'{}'.format(self.log_history_text)
+        stream_text = u'{} logs recorded\n\n{}'.format(len(self.log_history_data),
+                                                       self.log_history_text)
         stream_text += self.exec_info.to_stream() + u'----\n'
 
         if self.count < self.summarize_start_lines:
