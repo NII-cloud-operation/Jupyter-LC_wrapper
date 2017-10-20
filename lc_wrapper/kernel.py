@@ -333,7 +333,9 @@ class BufferedKernelBase(Kernel):
         stream_text += u'\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]) + '\n'
         if len(self.keyword_buff) <= self.summarize_header_lines * 2:
             return stream_text
-        stream_text += u'\033[0;31mMatched lines exceeded maximum number of view\033[0m\n'
+        msg = u'Matched lines exceed maximum number of view ({})' \
+              .format(self.summarize_header_lines * 2)
+        stream_text += u'\033[0;31m{}\033[0m\n'.format(msg)
         return stream_text
 
     def highlight_keywords(self, text):
