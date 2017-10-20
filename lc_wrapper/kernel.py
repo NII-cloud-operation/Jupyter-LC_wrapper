@@ -56,7 +56,13 @@ insecure|inaccessible|Forbidden|forbidden|Denied|denied
 Unauthorised|unauthorised|Unauthorized|unauthorized
 (No|no|Low|low) (.+ )?(Capacity|capacity|Space|space)
 has (encountered|stopped)
-is not'''
+is not
+initialize(d)?|initialise(d)?|start(ed)?|restart(ed)?|spawn(ed)?|complete(d)?
+finish(ed)?|resume(d)?|begin|attach(ed)?|detach(ed)?|reboot(ed)?|suspend(ed)?
+done|terminate(d)?|open(ed)?|close(d)?|(dis)?connect(ed)?|establish(ed)?
+allocate(d)?|assign(ed)?|load(ed)?|(in|re)?activate(d)?|block(ed)?|kill(ed)?
+refuse(d)?|insufficient|lack
+link(ed)? (up|down)'''
 
 
 class BufferedKernelBase(Kernel):
