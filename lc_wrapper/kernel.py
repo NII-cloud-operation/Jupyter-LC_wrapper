@@ -318,12 +318,47 @@ class BufferedKernelBase(Kernel):
             else:
                 self.summarize_log_buff.append(text)
 
-    def keyword_buff_append(self, text=None):
-        if not text is None:
-            if isinstance(text, list):
-                self.keyword_buff.extend(text)
+    def keyword_buff_append(self, text, highlight=True):
+        if isinstance(text, list):
+            self.keyword_buff.extend([u'\033[0;31m{}\033[0m'.format(t)
+                                      if highlight else t for t in text])
+        else:
+            self.keyword_buff.append(u'\033[0;31m{}\033[0m'.format(text)
+                                     if highlight else text)
+
+    def display_keyword_buff(self):
+        if len(self.keyword_buff) == 0:
+            return ''
+        stream_text = u'...\n'
+        stream_text += u'\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]) + '\n'
+        if len(self.keyword_buff) <= self.summarize_header_lines * 2:
+            return stream_text
+        msg = u'Matched lines exceed maximum number of view ({})' \
+              .format(self.summarize_header_lines * 2)
+        stream_text += u'\033[0;31m{}\033[0m\n'.format(msg)
+        return stream_text
+
+    def highlight_keywords(self, text):
+        matched = [p.search(text) for p in self.repatter]
+        matched = [m for m in matched if m is not None]
+        if len(matched) == 0:
+            return None
+        remain = text
+        result = None
+        while len(matched) > 0:
+            left = min([m.start() for m in matched])
+            if result is None:
+                result = remain[:left]
             else:
-                self.keyword_buff.append(text)
+                result += remain[:left]
+            keywords = [m.group() for m in matched if m.start() == left]
+            keyword = sorted(keywords, key=lambda s: len(s))[-1]
+            result += u'\033[0;31m{}\033[0m'.format(keyword)
+            remain = remain[left + len(keyword):]
+
+            matched = [p.search(remain) for p in self.repatter]
+            matched = [m for m in matched if m is not None]
+        return result + remain
 
     def _read_log_history_file(self):
         if self.log_history_file_path is not None and \
@@ -423,14 +458,9 @@ class BufferedKernelBase(Kernel):
                 # save the sentences the keyword matched
                 elif not self.repatter is None and len(self.repatter) > 0:
                     for text in content_text_list:
-                        for one_repatter in self.repatter:
-                            matchOB = one_repatter.search(text)
-                            if matchOB:
-                                self.log.debug('>>>>> matches ' + matchOB.group() + ' in ' + text)
-                                self.keyword_buff_append(text)
-                                break
-                            else:
-                                self.log.debug('>>>>> not match ' + ' in ' + text)
+                        matched = self.highlight_keywords(text)
+                        if matched is not None:
+                            self.keyword_buff_append(matched, highlight=False)
 
                 # save the first few lines
                 if len(self.summarize_header_buff) < self.summarize_header_lines:
@@ -449,9 +479,7 @@ class BufferedKernelBase(Kernel):
                     stream_text += self.exec_info.to_stream() + u'----\n'
 
                     stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
-                    if len(self.keyword_buff) > 0:
-                        stream_text += u'...\n'
-                        stream_text += u'\033[0;31m{}\033[0m\n'.format(u'\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]))
+                    stream_text += self.display_keyword_buff()
                     stream_text += u'...\n'
                     stream_text += u'{}'.format('\n'.join(content_text_list[:self.summarize_exec_lines]))
 
@@ -504,9 +532,7 @@ class BufferedKernelBase(Kernel):
             stream_text += u'\n'.join(self.summarize_last_buff)
         else:
             stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
-            if len(self.keyword_buff) > 0:
-                stream_text += u'...\n'
-                stream_text += u'\033[0;31m{}\033[0m\n'.format(u'\n'.join(self.keyword_buff[:self.summarize_header_lines * 2]))
+            stream_text += self.display_keyword_buff()
             stream_text += u'...\n'
             stream_text += u'{}'.format('\n'.join(self.summarize_last_buff[-self.summarize_footer_lines:]))
 
