@@ -354,7 +354,7 @@ class BufferedKernelBase(Kernel):
             result += u'\033[0;31m{}\033[0m'.format(keyword)
             remain = remain[left + len(keyword):]
 
-            matched = [p.match(remain) for p in self.repatter]
+            matched = [p.search(remain) for p in self.repatter]
             matched = [m for m in matched if m is not None]
         return result + remain
 
