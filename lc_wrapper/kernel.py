@@ -39,6 +39,7 @@ import pickle
 import dateutil
 from .log import ExecutionInfo, parse_execution_info_log
 
+MAX_HISTORY_SUMMARIES = 2
 
 SUMMARIZE_KEY = 'lc_wrapper'
 ENV_LOG_HISTORY_KEY = 'lc_wrapper_uuid'
@@ -330,7 +331,7 @@ class BufferedKernelBase(Kernel):
             with open(self.log_history_file_path, 'r') as f:
                 data = json.load(f)
             log_history_text = u''
-            for log in data:
+            for log in data[-MAX_HISTORY_SUMMARIES:]:
                 log_history_text += parse_execution_info_log(log).to_stream() + u'\n'
             return data, log_history_text
         else:
