@@ -19,8 +19,8 @@ class PythonKernelBuffered(BufferedKernelBase):
     }
     banner = 'Literate Computing Wrapper Kernel(IPython)'
 
-    def _start_kernel(self, km):
-        return km.start_kernel('python3') if PY3 else km.start_kernel('python2')
+    def _get_wrapped_kernel_name(self):
+        return 'python3' if PY3 else 'python2'
 
     def _get_env_request(self, client):
         result = self.send_code_to_ipython_kernel(client, '%env')

@@ -1,36 +1,22 @@
 from __future__ import print_function
 
-from functools import partial
 try:
     from queue import Empty  # Python 3
 except ImportError:
     from Queue import Empty  # Python 2
-import sys
 import time
-import zmq
 import io
-try:
-    monotonic = time.monotonic
-except AttributeError:
-    # py2
-    monotonic = time.time  # close enough
-
-try:
-    TimeoutError
-except NameError:
-    # py2
-    TimeoutError = RuntimeError
 
 from ipykernel.kernelbase import Kernel
 from datetime import datetime
 import os
 import os.path
-from jupyter_client.multikernelmanager import MultiKernelManager
+from jupyter_client.manager import KernelManager
 from jupyter_client.ioloop import IOLoopKernelManager
-from jupyter_core.paths import jupyter_runtime_dir
 import re
 import json
-import threading
+from threading import (Thread, Event, Timer)
+
 try:
     from os import getcwdu as getcwd  # Python 2
 except ImportError:
@@ -38,6 +24,11 @@ except ImportError:
 import pickle
 import dateutil
 from .log import ExecutionInfo, parse_execution_info_log
+
+from traitlets.config.configurable import LoggingConfigurable
+from ipython_genutils import py3compat
+from ipython_genutils.py3compat import PY3
+from types import MethodType
 
 MAX_HISTORY_SUMMARIES = 2
 
@@ -66,22 +57,248 @@ refuse(d)?|insufficient|lack
 link(ed)? (up|down)'''
 
 
+class ChannelReaderThread(Thread, LoggingConfigurable):
+
+    _exiting = False
+
+    def __init__(self, kernel, client, stream, session, channel, **kwargs):
+        Thread.__init__(self, **kwargs)
+        LoggingConfigurable.__init__(self, **kwargs)
+
+        self.daemon = True
+        self.channel_name = channel
+        self.channel = getattr(client, channel + "_channel")
+        self.kernel = kernel
+        self.client = client
+        self.stream = stream
+        self.session = session
+
+        self.log.debug("init ChannelReaderThread: channel_name=%s",
+                       self.channel_name)
+
+    def run(self):
+        self.log.debug("start ChannelReaderThread: channel_name=%s",
+                       self.channel_name)
+
+        while True:
+            try:
+                msg = self.channel.get_msg(block=True, timeout=0.2)
+                self.log.debug("Received %s message: %s",
+                               self.channel_name, str(msg))
+
+                msg_type = msg['msg_type']
+                idle = False
+                status_msg = False
+
+                if self.channel_name == 'iopub':
+                    content = msg['content']
+                    if msg_type == 'status':
+                        status_msg = True
+                        if content['execution_state'] == 'idle':
+                            self.kernel.idle_event.set()
+                            idle = True
+
+                if self.kernel.no_forwarding:
+                    self.kernel.msg_buffer.append(msg)
+                    continue
+
+                if msg['parent_header']['msg_type'] == 'shutdown_request':
+                    continue
+
+                msg_id = msg['parent_header']['msg_id']
+                parent_header = self.kernel.parent_headers.get(msg_id)
+                self.log.debug("parent_header: %s", str(parent_header))
+
+                if self.channel_name == 'iopub':
+                    ident = self.kernel._topic(msg_type)
+                    msg_content = self.kernel._hook_iopub_msg(parent_header, msg)
+                else:
+                    ident = self.kernel._parent_ident
+                    msg_content = msg['content']
+
+                if not status_msg:
+                    self.session.send(self.stream,
+                                      msg_type,
+                                      msg_content,
+                                      parent=parent_header,
+                                      ident=ident,
+                                      header=msg['header'],
+                                      metadata=msg['metadata'],
+                                      buffers=msg['buffers'])
+
+                if self.channel_name == 'stdin' and msg_type == 'input_request':
+                    self.log.debug("do input_request")
+                    self.input_request()
+
+                if idle:
+                    parent_msg_id = msg['parent_header'].get('msg_id')
+                    if parent_msg_id is not None:
+                        self.kernel._remove_parent_header(parent_msg_id)
+                    if not self.kernel.flush_stream_event.is_set():
+                        self.kernel._send_last_stdout_stream_text()
+                        self.kernel.flush_stream_event.set()
+            except Empty as e:
+                pass
+            except Exception as e:
+                self.log.error(e, exc_info=True)
+            finally:
+                if self._exiting:
+                    break
+
+        self.log.debug("exit ChannelReaderThread: %s", self.channel_name)
+
+    def input_request(self):
+        self.log.debug("wait input_reply")
+        while True:
+            try:
+                ident, reply = self.session.recv(self.stream, 0)
+            except Exception:
+                self.log.warn("Invalid Message:", exc_info=True)
+            except KeyboardInterrupt:
+                # re-raise KeyboardInterrupt, to truncate traceback
+                raise KeyboardInterrupt
+            else:
+                break
+
+        self.log.debug("input_reply: %s", str(reply))
+        msg = self.client.session.msg(reply['msg_type'],
+                                      content=reply['content'],
+                                      parent=reply['parent_header'],
+                                      header=reply['header'],
+                                      metadata=reply['metadata'])
+        self.client.stdin_channel.send(msg)
+
+    def stop(self):
+        if self.isAlive():
+            self._exiting = True
+            self.join()
+
+
 class BufferedKernelBase(Kernel):
+
+    blocking_msg_types = [
+        'execute_request',
+        'history_request',
+        'complete_request',
+        'inspect_request',
+        'kernel_info_request',
+        'comm_info_request',
+        'shutdown_request'
+    ]
+    proxy_channles = ['iopub', 'stdin']
+
+    threads = {}
+
+    parent_headers = {}
+    no_forwarding = False
+    msg_buffer = []
+    idle_event = Event()
+    flush_stream_event = Event()
+
+    execute_request_msg_id = None
+
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
+        self._init_message_handler()
         self.start_ipython_kernel()
 
+    def _init_message_handler(self):
+
+        def handler(self, stream, ident, parent):
+            self.log.debug("Received shell message: %s", str(parent))
+
+            msg_type = parent['msg_type']
+            content = parent['content']
+
+            self._hook_request_msg(parent)
+
+            msg = self.kc.session.msg(msg_type, content)
+            msgid = msg['header']['msg_id']
+            self.log.debug("save parent_header: %s => %s", msgid, str(parent['header']))
+            self.parent_headers[msgid] = parent['header']
+
+            self.kc.shell_channel.send(msg)
+
+            if msg_type in self.blocking_msg_types:
+                while True:
+                    try:
+                        reply_msg = self.kc._recv_reply(msgid, timeout=None)
+                        break
+                    except KeyboardInterrupt:
+                        self.log.debug("KeyboardInterrupt", exc_info=True)
+                        # propagate SIGINT to wrapped kernel
+                        self.km.interrupt_kernel()
+
+                        # this timer fire when the ipython kernel didnot interrupt within 5.0 sec.
+                        self.timer = Timer(5.0, self.close_files)
+                        self.log.debug('>>>>> close files: timer fired')
+                        self.timer.start()
+
+                reply_msg_content = self._hook_reply_msg(reply_msg)
+
+                self.log.debug('reply: %s', reply_msg)
+                self.session.send(stream,
+                                  reply_msg['msg_type'],
+                                  reply_msg_content,
+                                  parent, ident,
+                                  header=reply_msg['header'],
+                                  metadata=reply_msg['metadata'],
+                                  buffers=reply_msg['buffers'])
+
+        for msg_type in self.msg_types:
+            if msg_type == 'kernel_info_request':
+                continue
+            if msg_type == 'shutdown_request':
+                continue
+
+            self.log.debug('override shell message handler: msg_type=%s', msg_type)
+
+            if PY3:
+                setattr(self, msg_type, MethodType(handler, self))
+            else:
+                setattr(self, msg_type, MethodType(handler, self, type(self)))
+            self.shell_handlers[msg_type] = getattr(self, msg_type)
+
+        comm_msg_types = ['comm_open', 'comm_msg', 'comm_close']
+        for msg_type in comm_msg_types:
+            self.log.debug('init shell comm message handler: msg_type=%s', msg_type)
+
+            if PY3:
+                setattr(self, msg_type, MethodType(handler, self))
+            else:
+                setattr(self, msg_type, MethodType(handler, self, type(self)))
+            self.shell_handlers[msg_type] = getattr(self, msg_type)
+
     def start_ipython_kernel(self):
-        self.km = MultiKernelManager()
-        self.km.connection_dir = jupyter_runtime_dir()
-        self.kernelid = self._start_kernel(self.km)
+        kernel_name = self._get_wrapped_kernel_name()
+        self.km = KernelManager(kernel_name=kernel_name,
+                                client_class='jupyter_client.blocking.BlockingKernelClient')
+        self.log.debug('kernel_manager: %s', str(self.km))
 
-        self.log.debug('>>>>>>  start ipython kernel: %s' % self.kernelid)
+        self.log.info('start wrapped kernel: %s', kernel_name)
+        self.km.start_kernel()
+        self.kc = self.km.client()
+        self.log.debug('kernel_client: %s', str(self.kc))
 
-        kn = self.km.get_kernel(self.kernelid)
-        self.kc = kn.client()
+        self.log.debug('start_channels')
         self.kc.start_channels()
-        self.kc.wait_for_ready()
+
+        self.flush_stream_event.set()
+
+        try:
+            self.log.debug('wait for ready of wrapped kernel')
+            self.kc.wait_for_ready(timeout=None)
+        except RuntimeError:
+            self.kc.stop_channels()
+            self.km.shutdown_kernel()
+            raise
+
+        for channel in self.proxy_channles:
+            stream = getattr(self, channel + '_socket')
+            thread = ChannelReaderThread(self, self.kc, stream, self.session, channel)
+            thread.start()
+            self.threads[channel] = thread
+
         self.notebook_path = self.get_notebook_path(self.kc)
         self.log_path = os.path.join(self.notebook_path, u'.log')
         if not os.path.exists(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE)):
@@ -90,11 +307,118 @@ class BufferedKernelBase(Kernel):
         self.exec_info = None
         self._init_log()
 
-        self.log.debug('>>>>> kernel id: ' + self.kernelid)
-        self.log.debug(self.notebook_path)
+        self.log.debug('notebook_path: %s', self.notebook_path)
 
-    def _start_kernel(self, km):
+    def _get_wrapped_kernel_name(self, km):
         raise NotImplementedError()
+
+    def _remove_parent_header(self, msg_id):
+        if msg_id in self.parent_headers:
+            parent_header = self.parent_headers[msg_id]
+            self.log.debug("remove parent_header: %s => %s", msg_id, str(parent_header))
+            del self.parent_headers[msg_id]
+
+    def _hook_request_msg(self, parent):
+        msg_type = parent['msg_type']
+        if msg_type == 'execute_request':
+            self._hook_execute_request_msg(parent)
+
+    def _hook_execute_request_msg(self, parent):
+        try:
+            content = parent[u'content']
+            code = py3compat.cast_unicode_py2(content[u'code'])
+            silent = content[u'silent']
+            allow_stdin = content.get('allow_stdin', False)
+        except:
+            self.log.error("Got bad msg: ")
+            self.log.error("%s", parent)
+            return
+
+        self.execute_request_msg_id = parent['header']['msg_id']
+
+        if not silent:
+            self.execution_count += 1
+
+        cell_log_id = self._get_cell_id(parent)
+        if cell_log_id is not None:
+            self.log_history_file_path = os.path.join(self.log_path,
+                                                      cell_log_id,
+                                                      cell_log_id + u'.json')
+        else:
+            self.log_history_file_path = None
+        self.log_history_id = cell_log_id
+        self.log_history_data, self.log_history_text = self._read_log_history_file()
+
+        self.exec_info = ExecutionInfo(code)
+        if not silent:
+            env = self._get_config(self.kc)
+            self.summarize_on, new_code = self.is_summarize_on(code, env)
+            if self.summarize_on:
+                self.init_summarize()
+                self._load_env(env)
+                if not self.log_history_id is None:
+                    meme = {'lc_cell_meme': {'current': self.log_history_id}}
+                    self.log_buff_append(u'{}\n----\n'.format(json.dumps(meme)))
+                self.log_buff_append(u'{}\n----\n'.format(code))  # code
+                self._log_buff_flush()
+                self.log_buff_append(self.exec_info.to_stream_header() + u'----\n')
+                content[u'code'] = new_code
+
+                self.flush_stream_event.clear()
+                self.idle_event.clear()
+
+            self._allow_stdin = allow_stdin
+
+    def _hook_reply_msg(self, reply_msg):
+        if reply_msg['msg_type'] == 'execute_reply':
+            if self.summarize_on:
+                return self._hook_summarizing_execute_reply_msg(reply_msg)
+            else:
+                reply_msg['content']['execution_count'] = self.execution_count
+                return reply_msg['content']
+        return reply_msg['content']
+
+    def _hook_summarizing_execute_reply_msg(self, reply):
+        if hasattr(self, "timer"):
+            self.timer.cancel()
+            self.log.debug('>>>>> close files: timer cancelled')
+
+        content = reply['content']
+        content['execution_count'] = self.execution_count
+
+        self.log.debug('waiting for idling')
+        self.idle_event.wait()
+        self.log.debug('waiting for flushing stdout stream')
+        self.flush_stream_event.wait()
+        self.log.debug('flushed stdout stream')
+
+        self.execute_request_msg_id = None
+
+        return content
+
+    def _hook_iopub_msg(self, parent_header, msg):
+        msg_id = parent_header['msg_id']
+
+        content = msg['content']
+        # replace msg_id in the content
+        self._replace_msg_id(msg_id, msg['parent_header']['msg_id'], content)
+
+        if self.execute_request_msg_id == msg_id:
+            if self.summarize_on:
+                return self._output_hook_summarize(msg)
+            else:
+                return self._output_hook_default(msg)
+
+        return content
+
+    def _replace_msg_id(self, msg_id, wrapped_msg_id, content):
+        for k, v in content.items():
+            if isinstance(v, dict):
+                self._replace_msg_id(msg_id, wrapped_msg_id, v)
+            elif v == wrapped_msg_id:
+                content[k] = msg_id
+                self.log.debug('replace msg_id in content: %s => %s',
+                               wrapped_msg_id, msg_id)
 
     def _write_log(self, path, msg):
         if self.file_full_path is None:
@@ -139,56 +463,33 @@ class BufferedKernelBase(Kernel):
         self.log_file_object = None
 
     def send_code_to_ipython_kernel(self, client, code):
-        stream_text = ''
-        execute_result = None
-        msg_idle = False
-        msg_execute_reply = False
+        self.msg_buffer = []
+
+        self.idle_event.clear()
+        self.no_forwarding = True
+
         msg_id = client.execute(code)
-        while True:
-            try:
-                msg = self.kc.get_iopub_msg(block=False, timeout=None)
-                # self.log.debug('\n>>>{} iopub msg is'.format(code))
-                # self.log.debug(msg)
-            except Empty:
-                try:
-                    msg = self.kc.get_shell_msg(block=False, timeout=None)
-                    # self.log.debug('\n>>>{} shell msg is'.format(code))
-                    # self.log.debug(msg)
-                except Empty:
-                    continue
-            except Exception as e:
-                self.log.debug(e)
-                break
 
-            if msg['parent_header'].get('msg_id') != msg_id:
-                continue
+        self.kc._recv_reply(msg_id, timeout=None)
+        self.idle_event.wait()
+        self.no_forwarding = False
 
-            msg_type = msg['msg_type']
-            content = msg['content']
-            if msg_type == 'status' or msg_type == 'execute_reply':
-                if msg_type == 'status':
-                    if content['execution_state'] == 'idle':
-                        msg_idle = True
-                    else:
-                        continue
-                else:
-                    msg_execute_reply = True
+        msgs = [m for m in self.msg_buffer
+                if m['parent_header'].get('msg_id') == msg_id]
+        self.msg_buffer = []
 
-                if msg_idle and msg_execute_reply:
-                    break
-                else:
-                    continue
-            elif msg_type == 'stream':
-                try:
-                    if 'ExecutionResult' in content['text']:
-                        pass
-                    else:
-                        if content['name'] == 'stdout':
-                            stream_text += content['text']
-                except Exception as e:
-                    self.log.debug(e)
-            elif msg_type == 'execute_result':
-                execute_result = content['data'].get('text/plain', '')
+        stream_msgs = [m for m in msgs
+                       if m['msg_type'] == 'stream' and m['content']['name'] == 'stdout']
+        stream_text = ''.join([m['content']['text'] for m in stream_msgs])
+
+        execute_results = [m for m in msgs
+                           if m['msg_type'] == 'execute_result']
+        if len(execute_results) > 0:
+            content = execute_results[-1]['content']
+            execute_result = content['data'].get('text/plain', '')
+        else:
+            execute_result = None
+
         return execute_result if execute_result is not None else stream_text
 
     def get_notebook_path(self, client=None):
@@ -222,12 +523,6 @@ class BufferedKernelBase(Kernel):
         clear_content = {'wait': True}
         self.session.send(self.iopub_socket, 'clear_output', clear_content, self._parent_header,
             ident=None, buffers=None, track=False, header=None, metadata=None)
-
-    def kernel_info_request(self, stream, ident, parent):
-        # self.log.debug('>>>>>>>> kernel info req')
-        # if self.km_working:
-        #     self.send_kernel_info = True
-        super(BufferedKernelBase, self).kernel_info_request(stream, ident, parent)
 
     def _load_env(self, env):
         summarize = env.get(SUMMARIZE_KEY, '')
@@ -447,13 +742,11 @@ class BufferedKernelBase(Kernel):
             self.summarize_last_buff.extend(content_text_list[-lines:])
 
     def _output_hook_summarize(self, msg=None):
-        self.log.debug('\niopub msg is')
-        self.log.debug(msg)
         msg_type = msg['header']['msg_type']
         content = msg['content']
         if msg_type == 'stream':
             if 'ExecutionResult' in content['text']:
-                self.send_response(self.iopub_socket, 'stream', content)
+                return content
             else:
                 self.log_buff_append(content['text'])
                 self._log_buff_flush()
@@ -491,44 +784,22 @@ class BufferedKernelBase(Kernel):
                     stream_text += u'{}'.format('\n'.join(content_text_list[:self.summarize_exec_lines]))
 
                     stream_content = {'name': 'stdout', 'text': stream_text}
-                self.send_response(self.iopub_socket, 'stream', stream_content)
+                return stream_content
         elif msg_type in ('display_data', 'execute_result'):
             execute_result = content.copy()
             execute_result['execution_count'] = self.execution_count
             self._store_result({'msg_type': msg_type, 'content': execute_result})
-            self.send_response(self.iopub_socket, msg_type, execute_result)
+            return execute_result
         elif msg_type == 'error':
             error_result = content.copy()
             error_result['execution_count'] = self.execution_count
             self._store_result({'msg_type': msg_type, 'content': error_result})
-            self.send_response(self.iopub_socket, msg_type, error_result)
+            return error_result
 
-    def _reply_hook_summarize(self, msg_id, timeout=None):
-        """Receive and return the reply for a given request"""
-        if timeout is not None:
-            deadline = monotonic() + timeout
-        while True:
-            if timeout is not None:
-                timeout = max(0, deadline - monotonic())
-            try:
-                reply = self.kc.get_shell_msg(timeout=timeout)
-                self.log.debug('\nshell msg is')
-                self.log.debug(reply)
-            except Empty:
-                raise TimeoutError("Timeout waiting for reply")
-            if reply['parent_header'].get('msg_id') != msg_id:
-                # not my reply, someone may have forgotten to retrieve theirs
-                continue
-            else:
-                break
+        return content
 
-        if hasattr(self, "timer"):
-            self.timer.cancel()
-            self.log.debug('>>>>> close files: timer cancelled')
-
-        content = reply['content']
-        content['execution_count'] = self.execution_count
-
+    def _send_last_stdout_stream_text(self):
+        self.log.debug('_flush_stdout_stream')
         self.close_files()
         self.send_clear_content_msg()
 
@@ -561,6 +832,12 @@ class BufferedKernelBase(Kernel):
                                   header=None,
                                   metadata=None)
         self.result_files = []
+
+    def _output_hook_default(self, msg):
+        msg_type = msg['header']['msg_type']
+        content = msg['content']
+        if msg_type in ('display_data', 'execute_result'):
+            content['execution_count'] = self.execution_count
         return content
 
     def _get_cell_id(self, parent):
@@ -577,289 +854,20 @@ class BufferedKernelBase(Kernel):
             return None
         return lc_cell_meme['current']
 
-    def execute_request(self, stream, ident, parent):
-        cell_log_id = self._get_cell_id(parent)
-        if cell_log_id is not None:
-            self.log_history_file_path = os.path.join(self.log_path,
-                                                      cell_log_id,
-                                                      cell_log_id + u'.json')
-        else:
-            self.log_history_file_path = None
-        self.log_history_id = cell_log_id
-        self.log_history_data, self.log_history_text = self._read_log_history_file()
-        super(BufferedKernelBase, self).execute_request(stream, ident, parent)
-
-    def do_execute(self, code, silent, store_history=True, user_expressions=None,
-                   allow_stdin=False):
-        self.exec_info = ExecutionInfo(code)
-        if not silent:
-            env = self._get_config(self.kc)
-            self.summarize_on, new_code = self.is_summarize_on(code, env)
-            if self.summarize_on:
-                self.init_summarize()
-                self._load_env(env)
-                if not self.log_history_id is None:
-                    meme = {'lc_cell_meme': {'current': self.log_history_id}}
-                    self.log_buff_append(u'{}\n----\n'.format(json.dumps(meme)))
-                self.log_buff_append(u'{}\n----\n'.format(code))  # code
-                self._log_buff_flush()
-                self.log_buff_append(self.exec_info.to_stream_header() + u'----\n')
-                stdin_hook = self._stdin_hook_default
-                output_hook = self._output_hook_summarize
-                reply_hook = self._reply_hook_summarize
-            else:
-                stdin_hook = None
-                output_hook = self._output_hook_default
-                reply_hook = None
-
-            self._allow_stdin = allow_stdin
-
-        return self.execute_interactive(new_code, silent=silent, store_history=store_history,
-                 user_expressions=user_expressions, allow_stdin=allow_stdin, stop_on_error=True,
-                 timeout=None, output_hook=output_hook, stdin_hook=stdin_hook, reply_hook=reply_hook)
-
     def do_shutdown(self, restart):
-        self.log.debug('>>>>> do_shutdown :%s' % self.kernelid)
+        self.log.debug('>>>>> do_shutdown')
         self.close_files()
 
-        if hasattr(self, "km") and hasattr(self, "kernelid"):
-            if self.kernelid in self.km.list_kernel_ids():
-                self.km.shutdown_kernel(self.kernelid, now=False, restart=restart)
+        self.log.info('stopping wrapped kernel')
+        if hasattr(self, "km"):
+            self.km.shutdown_kernel(restart=restart)
+
+        for channel, thread in self.threads.items():
+            self.log.info('stopping %s ChannelReaderThread', channel)
+            thread.stop()
 
         return {'status': 'ok', 'restart': restart}
 
-    def _recv_reply(self, msg_id, timeout=None):
-        kc = self.kc
-        """Receive and return the reply for a given request"""
-        if timeout is not None:
-            deadline = monotonic() + timeout
-        while True:
-            if timeout is not None:
-                timeout = max(0, deadline - monotonic())
-            try:
-                reply = kc.get_shell_msg(timeout=timeout)
-            except Empty:
-                raise TimeoutError("Timeout waiting for reply")
-            if reply['parent_header'].get('msg_id') != msg_id:
-                # not my reply, someone may have forgotten to retrieve theirs
-                continue
-            content = reply['content']
-            content['execution_count'] = self.execution_count
-            return content
-
-    def _stdin_hook_default(self, msg):
-        kc = self.kc
-        """Handle an input request"""
-        content = msg['content']
-        if content.get('password', False):
-            prompt = self.getpass
-        elif sys.version_info < (3,):
-            prompt = self.raw_input
-        else:
-            prompt = self.raw_input
-
-        try:
-            raw_data = prompt(content["prompt"])
-        except EOFError:
-            # turn EOFError into EOF character
-            raw_data = '\x04'
-        except KeyboardInterrupt:
-            sys.stdout.write('\n')
-            return
-
-        # only send stdin reply if there *was not* another request
-        # or execution finished while we were reading.
-        if not (kc.stdin_channel.msg_ready() or kc.shell_channel.msg_ready()):
-            kc.input(raw_data)
-
-    def _output_hook_default(self, msg):
-        msg_type = msg['header']['msg_type']
-        content = msg['content']
-        if msg_type == 'stream':
-            self.send_response(self.iopub_socket, 'stream', content)
-        elif msg_type in ('display_data', 'execute_result'):
-            execute_result = {'data': content['data'], 'execution_count': self.execution_count, 'metadata':{}}
-            self.send_response(self.iopub_socket, msg_type, execute_result)
-        elif msg_type == 'error':
-            self.session.send(self.iopub_socket, 'error', content, self._parent_header)
-        """Default hook for redisplaying plain-text output"""
-        # msg_type = msg['header']['msg_type']
-        # content = msg['content']
-        # if msg_type == 'stream':
-        #     stream = getattr(sys, content['name'])
-        #     stream.write(content['text'])
-        # elif msg_type in ('display_data', 'execute_result'):
-        #     sys.stdout.write(content['data'].get('text/plain', ''))
-        # elif msg_type == 'error':
-        #     print('\n'.join(content['traceback']), file=sys.stderr)
-
-    def _output_hook_kernel(self, session, socket, parent_header, msg):
-        """Output hook when running inside an IPython kernel
-
-        adds rich output support.
-        """
-        msg_type = msg['header']['msg_type']
-        if msg_type in ('display_data', 'execute_result', 'error'):
-            session.send(socket, msg_type, msg['content'], parent=parent_header)
-        else:
-            self._output_hook_default(msg)
-
-    """
-    Changes
-    -------
-    set self.kc as kc
-    add paramete: reply_hook
-    """
-    def execute_interactive(self, code, silent=False, store_history=True,
-                 user_expressions=None, allow_stdin=None, stop_on_error=True,
-                 timeout=None, output_hook=None, stdin_hook=None, reply_hook=None
-                ):
-        """Execute code in the kernel interactively
-
-        Output will be redisplayed, and stdin prompts will be relayed as well.
-        If an IPython kernel is detected, rich output will be displayed.
-
-        You can pass a custom output_hook callable that will be called
-        with every IOPub message that is produced instead of the default redisplay.
-
-        Parameters
-        ----------
-        code : str
-            A string of code in the kernel's language.
-
-        silent : bool, optional (default False)
-            If set, the kernel will execute the code as quietly possible, and
-            will force store_history to be False.
-
-        store_history : bool, optional (default True)
-            If set, the kernel will store command history.  This is forced
-            to be False if silent is True.
-
-        user_expressions : dict, optional
-            A dict mapping names to expressions to be evaluated in the user's
-            dict. The expression values are returned as strings formatted using
-            :func:`repr`.
-
-        allow_stdin : bool, optional (default self.allow_stdin)
-            Flag for whether the kernel can send stdin requests to frontends.
-
-            Some frontends (e.g. the Notebook) do not support stdin requests.
-            If raw_input is called from code executed from such a frontend, a
-            StdinNotImplementedError will be raised.
-
-        stop_on_error: bool, optional (default True)
-            Flag whether to abort the execution queue, if an exception is encountered.
-
-        timeout: float or None (default: None)
-            Timeout to use when waiting for a reply
-
-        output_hook: callable(msg)
-            Function to be called with output messages.
-            If not specified, output will be redisplayed.
-
-        stdin_hook: callable(msg)
-            Function to be called with stdin_request messages.
-            If not specified, input/getpass will be called.
-
-        Returns
-        -------
-        reply: dict
-            The reply message for this request
-        """
-        kc = self.kc
-        if reply_hook is None:
-            reply_hook = self._recv_reply
-
-        if not kc.iopub_channel.is_alive():
-            raise RuntimeError("IOPub channel must be running to receive output")
-        if allow_stdin is None:
-            allow_stdin = self.allow_stdin
-        if allow_stdin and not kc.stdin_channel.is_alive():
-            raise RuntimeError("stdin channel must be running to allow input")
-        msg_id = kc.execute(code,
-                            silent=silent,
-                            store_history=store_history,
-                            user_expressions=user_expressions,
-                            allow_stdin=allow_stdin,
-                            stop_on_error=stop_on_error,
-        )
-        if stdin_hook is None:
-            stdin_hook = self._stdin_hook_default
-        if output_hook is None:
-            # detect IPython kernel
-            if 'IPython' in sys.modules:
-                from IPython import get_ipython
-                ip = get_ipython()
-                in_kernel = getattr(ip, 'kernel', False)
-                if in_kernel:
-                    output_hook = partial(
-                        self._output_hook_kernel,
-                        ip.display_pub.session,
-                        ip.display_pub.pub_socket,
-                        ip.display_pub.parent_header,
-                    )
-        if output_hook is None:
-            # default: redisplay plain-text outputs
-            output_hook = self._output_hook_default
-
-        # set deadline based on timeout
-        if timeout is not None:
-            deadline = monotonic() + timeout
-        else:
-            timeout_ms = None
-
-        poller = zmq.Poller()
-        iopub_socket = kc.iopub_channel.socket
-        poller.register(iopub_socket, zmq.POLLIN)
-        if allow_stdin:
-            stdin_socket = kc.stdin_channel.socket
-            poller.register(stdin_socket, zmq.POLLIN)
-        else:
-            stdin_socket = None
-
-        # wait for output and redisplay it
-        while True:
-            try:
-                if timeout is not None:
-                    timeout = max(0, deadline - monotonic())
-                    timeout_ms = 1e3 * timeout
-
-                events = dict(poller.poll(timeout_ms))
-                if not events:
-                    raise TimeoutError("Timeout waiting for output")
-
-                if stdin_socket in events:
-                    req = kc.stdin_channel.get_msg(timeout=0)
-                    stdin_hook(req)
-                    continue
-                if iopub_socket not in events:
-                    continue
-
-                msg = kc.iopub_channel.get_msg(timeout=0)
-                if msg['parent_header'].get('msg_id') != msg_id:
-                    # not from my request
-                    continue
-                output_hook(msg)
-
-                # stop on idle
-                if msg['header']['msg_type'] == 'status' and \
-                msg['content']['execution_state'] == 'idle':
-                    break
-            except KeyboardInterrupt:
-                # Ctrl-C shouldn't crash the kernel
-                self.log.info("KeyboardInterrupt caught in execute_interactive")
-                self.km.interrupt_kernel(self.kernelid)
-
-                # this timer fire when the ipython kernel didnot interrupt within 5.0 sec.
-                self.timer = threading.Timer(5.0, self.close_files)
-                self.log.debug('>>>>> close files: timer fired')
-                self.timer.start()
-                continue
-
-        # output is done, get the reply
-        if timeout is not None:
-            timeout = max(0, deadline - monotonic())
-        return reply_hook(msg_id, timeout=timeout)
 
 class LCWrapperKernelManager(IOLoopKernelManager):
     """Kernel manager for LC_wrapper kernel"""
