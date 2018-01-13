@@ -14,8 +14,8 @@ class BashKernelBuffered(BufferedKernelBase):
     }
     banner = 'Literate Computing Wrapper Kernel(Bash)'
 
-    def _start_kernel(self, km):
-        return km.start_kernel('bash')
+    def _get_wrapped_kernel_name(self):
+        return 'bash'
 
     def _get_env_request(self, client):
         result = self.send_code_to_ipython_kernel(client, 'env')
