@@ -237,13 +237,15 @@ class BufferedKernelBase(Kernel):
                 reply_msg_content = self._hook_reply_msg(reply_msg)
 
                 self.log.debug('reply: %s', reply_msg)
-                self.session.send(stream,
-                                  reply_msg['msg_type'],
-                                  reply_msg_content,
-                                  parent, ident,
-                                  header=reply_msg['header'],
-                                  metadata=reply_msg['metadata'],
-                                  buffers=reply_msg['buffers'])
+                reply_msg = self.session.send(stream,
+                                              reply_msg['msg_type'],
+                                              reply_msg_content,
+                                              parent, ident,
+                                              header=reply_msg['header'],
+                                              metadata=reply_msg['metadata'],
+                                              buffers=reply_msg['buffers'])
+
+                self._post_send_reply_msg(parent, reply_msg)
 
         for msg_type in self.msg_types:
             if msg_type == 'kernel_info_request':
@@ -395,6 +397,15 @@ class BufferedKernelBase(Kernel):
         self.execute_request_msg_id = None
 
         return content
+
+    def _post_send_reply_msg(self, parent, reply_msg):
+        msg_type = parent['msg_type']
+        if msg_type == 'execute_request':
+            content = parent['content']
+            silent = content['silent']
+            stop_on_error = content.get('stop_on_error', True)
+            if not silent and reply_msg['content']['status'] == u'error' and stop_on_error:
+                self._abort_queues()
 
     def _hook_iopub_msg(self, parent_header, msg):
         msg_id = parent_header['msg_id']
