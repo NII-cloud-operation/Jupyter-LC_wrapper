@@ -15,7 +15,7 @@ The lc_wrapper has several features shown below:
 
 * Jupyter Notebook 4.2.x
 * Python2.7
-* (Option) Jupyter-LC_nblineage
+* (Optional) Jupyter-LC_nblineage and Jupyter-multi_outputs ... to track relation between output file and cell (MEME)
 
 ## How to Install
 #### Install Jupyter-LC_wrapper
@@ -33,12 +33,13 @@ If you'd like to use with [bash kernel](https://github.com/takluyver/bash_kernel
 python -m lc_wrapper.bash.install
 ```
 
-#### Install lc_CodeCell_execute (and Jupyter-LC_nblineage)
+#### Install Jupyter-LC_nblineage and Jupyter-multi_outputs
 
-```
-jupyter nbextension install lc_CodeCell_execute --user
-jupyter nbextension enable lc_CodeCell_execute/main --user
-```
+In order to save output files with cell MEMEs, you should install and enable Jupyter-LC_nblineage and Jupyter-multi_outputs.
+
+- Jupyter-LC_nblineage ... See [Jupyter-LC_nblineage/README](https://github.com/NII-cloud-operation/Jupyter-LC_nblineage#installation)
+- Jupyter-multi_outputs ... See [Jupyter-multi_outputs](https://github.com/NII-cloud-operation/Jupyter-multi_outputs#how-to-install)
+
 #### Replace KernelManager
 
 Replace KernelManager for customized `shutdown_kernel()` behavior.
