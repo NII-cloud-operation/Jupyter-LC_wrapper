@@ -38,7 +38,7 @@ python -m lc_wrapper.bash.install
 In order to save output files with cell MEMEs, you should install and enable Jupyter-LC_nblineage and Jupyter-multi_outputs.
 
 - Jupyter-LC_nblineage ... See [Jupyter-LC_nblineage/README](https://github.com/NII-cloud-operation/Jupyter-LC_nblineage#installation)
-- Jupyter-multi_outputs ... See [Jupyter-multi_outputs](https://github.com/NII-cloud-operation/Jupyter-multi_outputs#how-to-install)
+- Jupyter-multi_outputs ... See [Jupyter-multi_outputs/README](https://github.com/NII-cloud-operation/Jupyter-multi_outputs#how-to-install)
 
 #### Replace KernelManager
 
@@ -126,7 +126,7 @@ Output Size(byte): 237, Lines: 18, Path: /notebooks/.log/20170426/20170426-14005
 ```
 %env lc_wrapper_uuid=x
 x : a character string that does not conflict with other uuid.
-If lc_CodeCell_execute and Jupyter-LC_nblineage are installed and turned on, uuid is set automatically.
+If Jupyter-multi_outputs and Jupyter-LC_nblineage are installed and turned on, uuid is set automatically.
 When both lc_wrapper_uuid and Jupyter-LC_nblineage's uuid are set, lc_wrapper_uuid takes precedence.
 
 Example:  
