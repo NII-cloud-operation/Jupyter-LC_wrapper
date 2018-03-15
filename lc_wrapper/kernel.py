@@ -26,9 +26,13 @@ import dateutil
 from .log import ExecutionInfo, parse_execution_info_log
 
 from traitlets.config.configurable import LoggingConfigurable
+from traitlets import (
+    Unicode, default
+)
 from ipython_genutils import py3compat
 from ipython_genutils.py3compat import PY3
 from types import MethodType
+from fluent import sender
 
 MAX_HISTORY_SUMMARIES = 2
 
@@ -197,8 +201,47 @@ class BufferedKernelBase(Kernel):
 
     execute_request_msg_id = None
 
+    data_dir = Unicode()
+    @default('data_dir')
+    def _data_dir_default(self):
+        app = None
+        try:
+            if JupyterApp.initialized():
+                app = JupyterApp.instance()
+        except MultipleInstanceError:
+            pass
+        if app is None:
+            # create an app, without the global instance
+            app = JupyterApp()
+            app.initialize(argv=[])
+        return app.data_dir
+
+    server_signature_file = Unicode(
+        help="""The file where the server signature is stored."""
+    ).tag(config=True)
+    @default('server_signature_file')
+    def _server_signature_file_default(self):
+        if 'lc_nblineage_server_signature_path' in os.environ:
+            return os.environ['lc_nblineage_server_signature_path']
+        if not self.data_dir:
+            return ''
+        return os.path.join(self.data_dir, 'server_signature')
+
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
+
+        if 'lc_wrapper_fluentd_host' in os.environ:
+            fluentd_host = os.environ['lc_wrapper_fluentd_host']
+            fluentd_port = int(os.environ.get('lc_wrapper_fluentd_port', '24224'))
+            fluentd_tag = os.environ.get('lc_wrapper_fluentd_tag', 'lc_wrapper')
+            self.sender = sender.FluentSender(fluentd_tag,
+                                              host=fluentd_host,
+                                              port=fluentd_port)
+            self.log.info('lc_wrapper: Enabled fluent logger: host=%s, port=%s, tag=%s',
+                          fluentd_host, fluentd_port, fluentd_tag)
+        else:
+            self.sender = None
+
         self._init_message_handler()
         self.start_ipython_kernel()
 
@@ -351,7 +394,9 @@ class BufferedKernelBase(Kernel):
         self.log_history_id = cell_log_id
         self.log_history_data, self.log_history_text = self._read_log_history_file()
 
-        self.exec_info = ExecutionInfo(code)
+        notebook_data = self._get_notebook_data(parent)
+
+        self.exec_info = ExecutionInfo(code, self.get_server_signature(), notebook_data)
         if not silent:
             env = self._get_config(self.kc)
             self.summarize_on, new_code = self.is_summarize_on(code, env)
@@ -463,11 +508,32 @@ class BufferedKernelBase(Kernel):
         if not self.log_file_object.closed:
             self.log.debug('>>>>> log file closed')
             self.log_file_object.close()
+            self.send_fluent_log()
         else:
             self.log.debug('>>>>> close_log_file: not executed because self.log_file_object is already closed')
 
         self.log.debug('close_log_file: self.log_file_object = None')
         self.log_file_object = None
+
+    def send_fluent_log(self):
+        if self.sender is None:
+            return
+        self.log.debug('>>>>> send_fluent_log')
+
+        record = {}
+        with io.open(self.exec_info.log_path, 'r') as f:
+            record['log'] = f.read()
+        self.sender.emit(None, record)
+
+        self.log.info('lc_wrapper: send_fluent_log: cell_meme=%s, uid=%s, gid=%s',
+                      self.log_history_id, os.getuid(), os.getgid(), self.get_server_signature())
+
+    def get_server_signature(self):
+        if os.path.exists(self.server_signature_file):
+            with io.open(self.server_signature_file, 'r') as f:
+                return f.read()
+        else:
+            return None
 
     def _init_log(self):
         self.file_full_path = None
@@ -865,9 +931,21 @@ class BufferedKernelBase(Kernel):
             return None
         return lc_cell_meme['current']
 
+    def _get_notebook_data(self, parent):
+        if 'content' not in parent:
+            return None
+        content = parent['content']
+        if 'lc_notebook_data' not in content:
+            return None
+        return content['lc_notebook_data']
+
     def do_shutdown(self, restart):
         self.log.debug('>>>>> do_shutdown')
         self.close_files()
+
+        if self.sender is not None:
+            self.log.debug('close fluent logger sender')
+            self.sender.close()
 
         self.log.info('stopping wrapped kernel')
         if hasattr(self, "km"):
