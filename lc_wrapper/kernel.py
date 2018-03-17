@@ -13,6 +13,7 @@ import os
 import os.path
 from jupyter_client.manager import KernelManager
 from jupyter_client.ioloop import IOLoopKernelManager
+from jupyter_core.application import JupyterApp
 import re
 import json
 from threading import (Thread, Event, Timer)
@@ -25,7 +26,7 @@ import pickle
 import dateutil
 from .log import ExecutionInfo, parse_execution_info_log
 
-from traitlets.config.configurable import LoggingConfigurable
+from traitlets.config.configurable import LoggingConfigurable, MultipleInstanceError
 from traitlets import (
     Unicode, default
 )
