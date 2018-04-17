@@ -584,6 +584,8 @@ class BufferedKernelBase(Kernel):
         while True:
             self.idle_event.wait()
             if self.idle_parent_header['msg_id'] != msg_id:
+                self.log.warn('unexpected idle message received: expected msg_id=%s, received msg_id=%s',
+                              msg_id, self.idle_parent_header['msg_id'])
                 continue
             self.log.debug('idle: msg_id=%s', msg_id)
             return
