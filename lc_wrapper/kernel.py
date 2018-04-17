@@ -583,8 +583,6 @@ class BufferedKernelBase(Kernel):
         self.log.debug('waiting for idle: msg_id=%s', msg_id)
         while True:
             self.idle_event.wait()
-            if self.idle_parent_header is None:
-                continue
             if self.idle_parent_header['msg_id'] != msg_id:
                 continue
             self.log.debug('idle: msg_id=%s', msg_id)
