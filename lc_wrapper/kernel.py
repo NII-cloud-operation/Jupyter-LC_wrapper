@@ -100,6 +100,7 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
                     if msg_type == 'status':
                         status_msg = True
                         if content['execution_state'] == 'idle':
+                            self.kernel.idle_parent_header = msg['parent_header']
                             self.kernel.idle_event.set()
                             idle = True
 
@@ -198,6 +199,7 @@ class BufferedKernelBase(Kernel):
     no_forwarding = False
     msg_buffer = []
     idle_event = Event()
+    idle_parent_header = None
     flush_stream_event = Event()
 
     execute_request_msg_id = None
@@ -256,6 +258,8 @@ class BufferedKernelBase(Kernel):
 
             self._hook_request_msg(parent)
 
+            self.idle_event.clear()
+
             msg = self.kc.session.msg(msg_type, content)
             msgid = msg['header']['msg_id']
             self.log.debug("save parent_header: %s => %s", msgid, str(parent['header']))
@@ -263,6 +267,7 @@ class BufferedKernelBase(Kernel):
 
             self.kc.shell_channel.send(msg)
 
+            reply_msg = None
             if msg_type in self.blocking_msg_types:
                 while True:
                     try:
@@ -290,6 +295,9 @@ class BufferedKernelBase(Kernel):
                                               buffers=reply_msg['buffers'])
 
                 self._post_send_reply_msg(parent, reply_msg)
+
+            self._wait_for_idle(msgid)
+            self._post_wait_for_idle(parent, reply_msg)
 
         for msg_type in self.msg_types:
             if msg_type == 'kernel_info_request':
@@ -413,7 +421,6 @@ class BufferedKernelBase(Kernel):
                 content[u'code'] = new_code
 
                 self.flush_stream_event.clear()
-                self.idle_event.clear()
 
             self._allow_stdin = allow_stdin
 
@@ -434,14 +441,6 @@ class BufferedKernelBase(Kernel):
         content = reply['content']
         content['execution_count'] = self.execution_count
 
-        self.log.debug('waiting for idling')
-        self.idle_event.wait()
-        self.log.debug('waiting for flushing stdout stream')
-        self.flush_stream_event.wait()
-        self.log.debug('flushed stdout stream')
-
-        self.execute_request_msg_id = None
-
         return content
 
     def _post_send_reply_msg(self, parent, reply_msg):
@@ -452,6 +451,16 @@ class BufferedKernelBase(Kernel):
             stop_on_error = content.get('stop_on_error', True)
             if not silent and reply_msg['content']['status'] == u'error' and stop_on_error:
                 self._abort_queues()
+
+    def _post_wait_for_idle(self, parent, reply_msg):
+        if reply_msg is None:
+            return
+        if reply_msg['msg_type'] == 'execute_reply' and self.summarize_on:
+            self.log.debug('waiting for flushing stdout stream')
+            self.flush_stream_event.wait()
+            self.log.debug('flushed stdout stream')
+
+            self.execute_request_msg_id = None
 
     def _hook_iopub_msg(self, parent_header, msg):
         msg_id = parent_header['msg_id']
@@ -549,7 +558,7 @@ class BufferedKernelBase(Kernel):
         msg_id = client.execute(code)
 
         self.kc._recv_reply(msg_id, timeout=None)
-        self.idle_event.wait()
+        self._wait_for_idle(msg_id)
         self.no_forwarding = False
 
         msgs = [m for m in self.msg_buffer
@@ -569,6 +578,17 @@ class BufferedKernelBase(Kernel):
             execute_result = None
 
         return execute_result if execute_result is not None else stream_text
+
+    def _wait_for_idle(self, msg_id):
+        self.log.debug('waiting for idle: msg_id=%s', msg_id)
+        while True:
+            self.idle_event.wait()
+            if self.idle_parent_header['msg_id'] != msg_id:
+                self.log.warn('unexpected idle message received: expected msg_id=%s, received msg_id=%s',
+                              msg_id, self.idle_parent_header['msg_id'])
+                continue
+            self.log.debug('idle: msg_id=%s', msg_id)
+            return
 
     def get_notebook_path(self, client=None):
         return getcwd()
