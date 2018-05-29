@@ -24,7 +24,7 @@ except ImportError:
     from os import getcwd  # Python 3
 import pickle
 import dateutil
-from .log import ExecutionInfo, parse_execution_info_log
+from .log import ExecutionInfo
 
 from traitlets.config.configurable import LoggingConfigurable, MultipleInstanceError
 from traitlets import (
@@ -34,8 +34,6 @@ from ipython_genutils import py3compat
 from ipython_genutils.py3compat import PY3
 from types import MethodType
 from fluent import sender
-
-MAX_HISTORY_SUMMARIES = 2
 
 SUMMARIZE_KEY = 'lc_wrapper'
 ENV_LOG_HISTORY_KEY = 'lc_wrapper_uuid'
@@ -401,7 +399,7 @@ class BufferedKernelBase(Kernel):
         else:
             self.log_history_file_path = None
         self.log_history_id = cell_log_id
-        self.log_history_data, self.log_history_text = self._read_log_history_file()
+        self.log_history_data = self._read_log_history_file()
 
         notebook_data = self._get_notebook_data(parent)
 
@@ -417,7 +415,7 @@ class BufferedKernelBase(Kernel):
                     self.log_buff_append(u'{}\n----\n'.format(json.dumps(meme)))
                 self.log_buff_append(u'{}\n----\n'.format(code))  # code
                 self._log_buff_flush()
-                self.log_buff_append(self.exec_info.to_stream_header() + u'----\n')
+                self.log_buff_append(self.exec_info.to_logfile_header() + u'----\n')
                 content[u'code'] = new_code
 
                 self.flush_stream_event.clear()
@@ -646,7 +644,7 @@ class BufferedKernelBase(Kernel):
                                                       cell_log_id,
                                                       cell_log_id + u'.json')
             self.log_history_id = cell_log_id
-        self.log_history_data, self.log_history_text = self._read_log_history_file()
+        self.log_history_data = self._read_log_history_file()
 
         self.repatter = []
         text = env.get(IGNORE_SUMMARIZE_KEY, 'file:default')
@@ -765,12 +763,9 @@ class BufferedKernelBase(Kernel):
            os.path.exists(self.log_history_file_path):
             with open(self.log_history_file_path, 'r') as f:
                 data = json.load(f)
-            log_history_text = u''
-            for log in data[-MAX_HISTORY_SUMMARIES:]:
-                log_history_text += parse_execution_info_log(log).to_stream() + u'\n'
-            return data, log_history_text
+            return data
         else:
-            return [], u''
+            return []
 
     def _write_log_history_file(self, data):
         if self.log_history_file_path is None:
@@ -794,7 +789,7 @@ class BufferedKernelBase(Kernel):
         self.log.debug('>>>>> close_files')
         if hasattr(self, "summarize_on") and self.summarize_on:
             self.exec_info.finished(len(self.keyword_buff))
-            self.log_buff_append(u'\n----\n{}----\n'.format(self.exec_info.to_stream_footer()))
+            self.log_buff_append(u'\n----\n{}----\n'.format(self.exec_info.to_logfile_footer()))
             for result in self.result_files:
                 self.log_buff_append(u'result: {}\n'.format(result))
             self.block_messages = True
@@ -873,7 +868,7 @@ class BufferedKernelBase(Kernel):
 
                     self.send_clear_content_msg()
 
-                    stream_text = u'{}'.format(self.log_history_text)
+                    stream_text = u''
                     stream_text += self.exec_info.to_stream() + u'----\n'
 
                     stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
@@ -901,9 +896,8 @@ class BufferedKernelBase(Kernel):
         self.close_files()
         self.send_clear_content_msg()
 
-        stream_text = u'{} logs recorded\n\n{}'.format(len(self.log_history_data),
-                                                       self.log_history_text)
-        stream_text += self.exec_info.to_stream() + u'----\n'
+        stream_text = u''
+        stream_text += self.exec_info.to_stream(len(self.log_history_data)) + u'----\n'
 
         if self.count < self.summarize_start_lines:
             stream_text += u'\n'.join(self.summarize_last_buff)
