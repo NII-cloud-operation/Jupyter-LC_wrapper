@@ -837,9 +837,7 @@ class BufferedKernelBase(Kernel):
                 self.log_buff_append(content['text'])
                 self._log_buff_flush()
 
-                content = msg['content']
                 content_text_list = content['text'].splitlines(False)    # with LF
-
                 # save the stderr messages
                 if content['name'] == 'stderr':
                     self.keyword_buff_append(content_text_list)
