@@ -486,9 +486,6 @@ class BufferedKernelBase(Kernel):
     def open_log_file(self, path):
         self.log.debug('>>>>> open_log_file')
 
-        if self.log_file_object is not None:
-            return
-
         now = datetime.now(dateutil.tz.tzlocal())
         path = os.path.join(path, now.strftime("%Y%m%d"))
         if not os.path.exists(path):
