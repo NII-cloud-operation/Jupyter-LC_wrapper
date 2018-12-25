@@ -357,7 +357,6 @@ class BufferedKernelBase(Kernel):
             with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE), 'w') as f:
                 f.write(IPYTHON_DEFAULT_PATTERN)
         self.exec_info = None
-        self._init_log()
 
         self.log.debug('notebook_path: %s', self.notebook_path)
 
@@ -407,31 +406,29 @@ class BufferedKernelBase(Kernel):
         if not silent:
             env = self._get_config(self.kc)
             self.summarize_on, new_code = self.is_summarize_on(code, env)
+            self._init_default_config()
+            self._start_log()
             if self.summarize_on:
-                self.init_summarize()
-                self._load_env(env)
-                if not self.log_history_id is None:
-                    meme = {'lc_cell_meme': {'current': self.log_history_id}}
-                    self.log_buff_append(u'{}\n----\n'.format(json.dumps(meme)))
-                self.log_buff_append(u'{}\n----\n'.format(code))  # code
-                self._log_buff_flush()
-                self.log_buff_append(self.exec_info.to_logfile_header() + u'----\n')
-                content[u'code'] = new_code
+                self._start_summarize()
+            self._load_env(env)
+            if not self.log_history_id is None:
+                meme = {'lc_cell_meme': {'current': self.log_history_id}}
+                self.log_buff_append(u'{}\n----\n'.format(json.dumps(meme)))
+            self.log_buff_append(u'{}\n----\n'.format(code))  # code
+            self._log_buff_flush()
+            self.log_buff_append(self.exec_info.to_logfile_header() + u'----\n')
+            content[u'code'] = new_code
 
-                self.flush_stream_event.clear()
+            self.flush_stream_event.clear()
 
             self._allow_stdin = allow_stdin
 
     def _hook_reply_msg(self, reply_msg):
         if reply_msg['msg_type'] == 'execute_reply':
-            if self.summarize_on:
-                return self._hook_summarizing_execute_reply_msg(reply_msg)
-            else:
-                reply_msg['content']['execution_count'] = self.execution_count
-                return reply_msg['content']
+            return self._hook_execute_reply_msg(reply_msg)
         return reply_msg['content']
 
-    def _hook_summarizing_execute_reply_msg(self, reply):
+    def _hook_execute_reply_msg(self, reply):
         if hasattr(self, "timer"):
             self.timer.cancel()
             self.log.debug('>>>>> close files: timer cancelled')
@@ -453,7 +450,7 @@ class BufferedKernelBase(Kernel):
     def _post_wait_for_idle(self, parent, reply_msg):
         if reply_msg is None:
             return
-        if reply_msg['msg_type'] == 'execute_reply' and self.summarize_on:
+        if reply_msg['msg_type'] == 'execute_reply':
             self.log.debug('waiting for flushing stdout stream')
             self.flush_stream_event.wait()
             self.log.debug('flushed stdout stream')
@@ -468,10 +465,7 @@ class BufferedKernelBase(Kernel):
         self._replace_msg_id(msg_id, msg['parent_header']['msg_id'], content)
 
         if self.execute_request_msg_id == msg_id:
-            if self.summarize_on:
-                return self._output_hook_summarize(msg)
-            else:
-                return self._output_hook_default(msg)
+            return self._output_hook(msg)
 
         return content
 
@@ -484,29 +478,26 @@ class BufferedKernelBase(Kernel):
                 self.log.debug('replace msg_id in content: %s => %s',
                                wrapped_msg_id, msg_id)
 
-    def _write_log(self, path, msg):
-        if self.file_full_path is None:
-            now = datetime.now(dateutil.tz.tzlocal())
-            path = os.path.join(path, now.strftime("%Y%m%d"))
-            if not os.path.exists(path):
-                os.makedirs(path)
-            file_name = now.strftime("%Y%m%d-%H%M%S") + "-%04d" % (now.microsecond // 1000)
-            self.file_full_path = os.path.join(path, file_name + u'.log')
-            self.exec_info.log_path = self.file_full_path
-
-        if self.log_file_object is None:
-            self.log_file_object = self.open_log_file(self.file_full_path)
-
-        self.log.debug(self.file_full_path)
-        self.log.debug(self.log_file_object)
-
+    def _write_log(self, msg):
         if not msg is None:
             self.log_file_object.write(msg)
             self.exec_info.file_size = self.log_file_object.tell()
 
     def open_log_file(self, path):
         self.log.debug('>>>>> open_log_file')
-        return io.open(path, "a", encoding='utf-8')
+
+        now = datetime.now(dateutil.tz.tzlocal())
+        path = os.path.join(path, now.strftime("%Y%m%d"))
+        if not os.path.exists(path):
+            os.makedirs(path)
+        file_name = now.strftime("%Y%m%d-%H%M%S") + "-%04d" % (now.microsecond // 1000)
+        self.file_full_path = os.path.join(path, file_name + u'.log')
+        self.exec_info.log_path = self.file_full_path
+
+        self.log_file_object = io.open(self.file_full_path, "a", encoding='utf-8')
+
+        self.log.debug(self.file_full_path)
+        self.log.debug(self.log_file_object)
 
     def close_log_file(self):
         self.log.debug('>>>>> close_log_file')
@@ -542,10 +533,6 @@ class BufferedKernelBase(Kernel):
                 return f.read()
         else:
             return None
-
-    def _init_log(self):
-        self.file_full_path = None
-        self.log_file_object = None
 
     def send_code_to_ipython_kernel(self, client, code):
         self.msg_buffer = []
@@ -695,26 +682,19 @@ class BufferedKernelBase(Kernel):
             return (force if force is not None else False,
                     code)
 
-    def buff_init(self):
-        self.summarize_log_buff = []
-        self.summarize_header_buff = []
-        self.summarize_last_buff = []
-        self.keyword_buff = []
-
     def _log_buff_flush(self, force=False):
-        if force or self.file_full_path is None or \
-           len(self.summarize_log_buff) > 100:
-            self._write_log(self.log_path, u''.join(self.summarize_log_buff))
-            del self.summarize_log_buff[:]
+        if force or len(self.log_buff) > 100:
+            self._write_log(u''.join(self.log_buff))
+            del self.log_buff[:]
 
     def log_buff_append(self, text=None):
         if self.block_messages:
             return
         if not text is None:
             if isinstance(text, list):
-                self.summarize_log_buff.extend(text)
+                self.log_buff.extend(text)
             else:
-                self.summarize_log_buff.append(text)
+                self.log_buff.append(text)
 
     def keyword_buff_append(self, text, highlight=True):
         if isinstance(text, list):
@@ -787,7 +767,7 @@ class BufferedKernelBase(Kernel):
 
     def close_files(self):
         self.log.debug('>>>>> close_files')
-        if hasattr(self, "summarize_on") and self.summarize_on:
+        if self.log_file_object is not None:
             self.exec_info.finished(len(self.keyword_buff))
             self.log_buff_append(u'\n----\n{}----\n'.format(self.exec_info.to_logfile_footer()))
             for result in self.result_files:
@@ -799,16 +779,26 @@ class BufferedKernelBase(Kernel):
             #save log file path
             self._write_log_history_file(self.log_history_data)
 
-    def init_summarize(self):
-        self.block_messages = False
-        self.buff_init()
+    def _init_default_config(self):
         self.summarize_start_lines = 50
         self.summarize_header_lines = 20
         self.summarize_exec_lines = 1
         self.summarize_footer_lines = 20
+
+    def _start_summarize(self):
         self.count = 0
+        self.summarize_header_buff = []
+        self.summarize_last_buff = []
+
+    def _start_log(self):
+        self.block_messages = False
+        self.log_buff = []
+        self.keyword_buff = []
         self.result_files = []
-        self._init_log()
+        self.file_full_path = None
+        self.log_file_object = None
+
+        self.open_log_file(self.log_path)
 
     def _store_result(self, result):
         if self.file_full_path is None:
@@ -834,7 +824,7 @@ class BufferedKernelBase(Kernel):
             del self.summarize_last_buff[:]
             self.summarize_last_buff.extend(content_text_list[-lines:])
 
-    def _output_hook_summarize(self, msg=None):
+    def _output_hook(self, msg=None):
         msg_type = msg['header']['msg_type']
         content = msg['content']
         if msg_type == 'stream':
@@ -855,29 +845,10 @@ class BufferedKernelBase(Kernel):
                         if matched is not None:
                             self.keyword_buff_append(matched, highlight=False)
 
-                # save the first few lines
-                if len(self.summarize_header_buff) < self.summarize_header_lines:
-                    self.summarize_header_buff.extend(content_text_list)
-                self._store_last_lines(content_text_list)
+                if self.summarize_on:
+                    return self._summarize_stream_output(msg, content, content_text_list)
 
-                if self.count < self.summarize_start_lines:
-                    self.count += len(content_text_list)
-                    stream_content = {'name': content['name'], 'text': content['text']}
-                else:
-                    self._log_buff_flush()
-
-                    self.send_clear_content_msg()
-
-                    stream_text = u''
-                    stream_text += self.exec_info.to_stream() + u'----\n'
-
-                    stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
-                    stream_text += self.display_keyword_buff()
-                    stream_text += u'...\n'
-                    stream_text += u'{}'.format('\n'.join(content_text_list[:self.summarize_exec_lines]))
-
-                    stream_content = {'name': 'stdout', 'text': stream_text}
-                return stream_content
+                return content
         elif msg_type in ('display_data', 'execute_result'):
             execute_result = content.copy()
             execute_result['execution_count'] = self.execution_count
@@ -891,9 +862,41 @@ class BufferedKernelBase(Kernel):
 
         return content
 
+    def _summarize_stream_output(self, msg, content, lines):
+        # save the first few lines
+        if len(self.summarize_header_buff) < self.summarize_header_lines:
+            self.summarize_header_buff.extend(lines)
+        self._store_last_lines(lines)
+
+        if self.count < self.summarize_start_lines:
+            self.count += len(lines)
+            stream_content = {'name': content['name'], 'text': content['text']}
+        else:
+            self._log_buff_flush()
+
+            self.send_clear_content_msg()
+
+            stream_text = u''
+            stream_text += self.exec_info.to_stream() + u'----\n'
+
+            stream_text += u'{}\n'.format('\n'.join(self.summarize_header_buff[:self.summarize_header_lines]))
+            stream_text += self.display_keyword_buff()
+            stream_text += u'...\n'
+            stream_text += u'{}'.format('\n'.join(lines[:self.summarize_exec_lines]))
+
+            stream_content = {'name': 'stdout', 'text': stream_text}
+        return stream_content
+
     def _send_last_stdout_stream_text(self):
         self.log.debug('_flush_stdout_stream')
         self.close_files()
+
+        if self.summarize_on:
+            self._send_last_summarized_stdout_stream_text()
+
+        self.result_files = []
+
+    def _send_last_summarized_stdout_stream_text(self):
         self.send_clear_content_msg()
 
         stream_text = u''
@@ -923,14 +926,6 @@ class BufferedKernelBase(Kernel):
                                   track=False,
                                   header=None,
                                   metadata=None)
-        self.result_files = []
-
-    def _output_hook_default(self, msg):
-        msg_type = msg['header']['msg_type']
-        content = msg['content']
-        if msg_type in ('display_data', 'execute_result'):
-            content['execution_count'] = self.execution_count
-        return content
 
     def _get_cell_id(self, parent):
         if 'content' not in parent:
