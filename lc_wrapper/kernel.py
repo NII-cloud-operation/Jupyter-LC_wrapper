@@ -435,6 +435,9 @@ class BufferedKernelBase(Kernel):
 
         content = reply['content']
         content['execution_count'] = self.execution_count
+        content['lc_wrapper'] = {
+            'log_path': self.file_full_path
+        }
 
         return content
 

@@ -14,5 +14,7 @@ setup(
     install_requires=['ipykernel>=4.0.0', 'jupyter_client', 'python-dateutil', 'fluent-logger'],
     description='Kernel Wrapper for Literate Computing',
     author='NII Cloud Operation Team',
-    url='https://github.com/NII-cloud-operation/'
+    url='https://github.com/NII-cloud-operation/',
+    include_package_data=True,
+    zip_safe=False
 )
