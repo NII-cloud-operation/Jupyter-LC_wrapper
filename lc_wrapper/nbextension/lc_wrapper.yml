@@ -1,0 +1,7 @@
+Type: Jupyter Notebook Extension
+Name: LC wrapper
+Section: notebook
+Description: "The frontend extension for Jupyter-LC_wrapper"
+Link: README.md
+Main: main.js
+Compatibility: 5.x

@@ -40,6 +40,22 @@ In order to save output files with cell MEMEs, you should install and enable Jup
 - Jupyter-LC_nblineage ... See [Jupyter-LC_nblineage/README](https://github.com/NII-cloud-operation/Jupyter-LC_nblineage#installation)
 - Jupyter-multi_outputs ... See [Jupyter-multi_outputs/README](https://github.com/NII-cloud-operation/Jupyter-multi_outputs#how-to-install)
 
+#### Install and enable frontend extension
+
+Jupyter-LC_wrapper has the frontend extension for recording log file history as cell metadata.
+
+To install the extension, copy its files into the jupyter server's search directory.
+
+```
+jupyter nbextension install --py lc_wrapper --user
+```
+
+To use the extension, you will also need to enable it.
+
+```
+jupyter nbextension enable --py lc_wrapper --user
+```
+
 #### Replace KernelManager
 
 Replace KernelManager for customized `shutdown_kernel()` behavior.
@@ -52,6 +68,25 @@ c.MultiKernelManager.kernel_manager_class = 'lc_wrapper.LCWrapperKernelManager'
 
 
 ## How to Use
+
+### Logging cell output
+
+The Jupyter-LC_wrapper kernel logs the cell output to a local file for each execution.
+The frontend extension records the log file path as cell metadata.
+The log file path is sent to the frontend with `execute_reply` message.
+
+Example of cell metadata:
+```
+{
+  "lc_wrapper": {
+    "log_history": [
+      "/notebooks/.log/20181221/20181221-141855-0874.log",
+      "/notebooks/.log/20181221/20181221-141912-0312.log"
+    ]
+  },
+  (snip)
+}
+```
 
 ### Enabling Summarizing mode
 
