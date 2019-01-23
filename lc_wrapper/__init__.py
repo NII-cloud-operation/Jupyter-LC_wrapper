@@ -1,6 +1,7 @@
 """Wrapper Kernel for Literate Computing"""
 
 from .kernel import LCWrapperKernelManager
+from .kernelspec import LCWrapperKernelSpecManager
 
 # nbextension
 def _jupyter_nbextension_paths():
