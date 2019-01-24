@@ -16,5 +16,10 @@ setup(
     author='NII Cloud Operation Team',
     url='https://github.com/NII-cloud-operation/',
     include_package_data=True,
-    zip_safe=False
+    zip_safe=False,
+    entry_points = {
+        'console_scripts': [
+            'jupyter-wrapper-kernelspec = lc_wrapper.kernelspecapp:LCWrapperKernelSpecApp.launch_instance'
+        ]
+    }
 )

@@ -66,6 +66,21 @@ Append the below line to `jupyter_notebook_config.py`.
 c.MultiKernelManager.kernel_manager_class = 'lc_wrapper.LCWrapperKernelManager'
 ```
 
+#### Replace KernelSpecManager (optional)
+
+If you want to completely replace the Python or Bash kernel in the kernel selection list with the wrapper kernel,
+you can use the custom kernel spec manager (`lc_wrapper.LCWrapperKernelSpecManager`).
+This custom kernel spec manager provides another kernel spec list that is separated from the default kernel spec list.
+
+Append the following line to `jupyter_notebook_config.py`
+
+```
+c.NotebookApp.kernel_spec_manager_class = 'lc_wrapper.LCWrapperKernelSpecManager'
+```
+
+If you want to install additional kernels to this kernel spec list,
+you can use `jupyter wrapper-kernelspec` command like `jupyter kernelspec` command.
+For details, please execute `jupyter wrapper-kernelspec --help`.
 
 ## How to Use
 
