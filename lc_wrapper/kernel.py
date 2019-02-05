@@ -36,7 +36,6 @@ from types import MethodType
 from fluent import sender
 
 SUMMARIZE_KEY = 'lc_wrapper'
-ENV_LOG_HISTORY_KEY = 'lc_wrapper_uuid'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
 FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
 
@@ -101,10 +100,6 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
                             self.kernel.idle_parent_header = msg['parent_header']
                             self.kernel.idle_event.set()
                             idle = True
-
-                if self.kernel.no_forwarding:
-                    self.kernel.msg_buffer.append(msg)
-                    continue
 
                 if msg['parent_header']['msg_type'] == 'shutdown_request':
                     continue
@@ -194,8 +189,6 @@ class BufferedKernelBase(Kernel):
     threads = {}
 
     parent_headers = {}
-    no_forwarding = False
-    msg_buffer = []
     idle_event = Event()
     idle_parent_header = None
     flush_stream_event = Event()
@@ -537,36 +530,6 @@ class BufferedKernelBase(Kernel):
         else:
             return None
 
-    def send_code_to_ipython_kernel(self, client, code):
-        self.msg_buffer = []
-
-        self.idle_event.clear()
-        self.no_forwarding = True
-
-        msg_id = client.execute(code)
-
-        self.kc._recv_reply(msg_id, timeout=None)
-        self._wait_for_idle(msg_id)
-        self.no_forwarding = False
-
-        msgs = [m for m in self.msg_buffer
-                if m['parent_header'].get('msg_id') == msg_id]
-        self.msg_buffer = []
-
-        stream_msgs = [m for m in msgs
-                       if m['msg_type'] == 'stream' and m['content']['name'] == 'stdout']
-        stream_text = ''.join([m['content']['text'] for m in stream_msgs])
-
-        execute_results = [m for m in msgs
-                           if m['msg_type'] == 'execute_result']
-        if len(execute_results) > 0:
-            content = execute_results[-1]['content']
-            execute_result = content['data'].get('text/plain', '')
-        else:
-            execute_result = None
-
-        return execute_result if execute_result is not None else stream_text
-
     def _wait_for_idle(self, msg_id):
         self.log.debug('waiting for idle: msg_id=%s', msg_id)
         while True:
@@ -581,11 +544,8 @@ class BufferedKernelBase(Kernel):
     def get_notebook_path(self, client=None):
         return getcwd()
 
-    def _get_env_request(self, client):
-        raise NotImplementedError()
-
     def _get_config(self, client):
-        env = self._get_env_request(client)
+        env = os.environ
         config_path = os.path.join(self.notebook_path, '.lc_wrapper')
         if not os.path.exists(config_path):
             return env
@@ -627,13 +587,6 @@ class BufferedKernelBase(Kernel):
                                          self.summarize_header_lines + \
                                          self.summarize_footer_lines + 1)
 
-        cell_log_id = env.get(ENV_LOG_HISTORY_KEY, None)
-        if cell_log_id is not None:
-            # Overwrite log history file name
-            self.log_history_file_path = os.path.join(self.log_path,
-                                                      cell_log_id,
-                                                      cell_log_id + u'.json')
-            self.log_history_id = cell_log_id
         self.log_history_data = self._read_log_history_file()
 
         self.repatter = []

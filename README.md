@@ -119,36 +119,50 @@ Example:
 !!!ls -al
 ```
 
-Also you can use `lc_wrapper_force` environment variable to enable/disable the mode forcefully on every cell.
+### Settings by configuration file
+
+You can customize the summarizing settings with a configuration file.
+
+Please put the file named `.lc_wrapper` in the same directory as the notebook file.
+The settings are applied to the all notebooks in this directory.
+
+The configuration file is a text file consisting of lines like `key=value`.
+If the line is empty or starts with `#`, it is ignored.
+
+This is an example of `.lc_wrapper` file.
 
 ```
-[In]
----
-%env lc_wrapper_force=on
-
-[In]
----
-# The summarizing mode enabled without `!!`
-!ls
+# Example of .lc_wrapper
+lc_wrapper_force=on
+lc_wrapper=2:2:2:2
+lc_wrapper_regex=3|5|7
 ```
 
-### Settings by Environment Variables
+#### `lc_wrapper_force`
 
-* Control the output area with the environment variable 'lc_wrapper'.
+You can use `lc_wrapper_force` to enable summarizing mode forcefully on every cell.
+
+If the value is `on`, summarizing mode is enabled on every cell.
+If it is `off` or otherwise, the enable/disable of the summarizing mode follows the contents of the cell.
+
+If it is enabled, even if the code cell does not start with `!!`, the output is summarized.
+
+#### `lc_wrapper`
+
+The `lc_wrapper` controls the summarized output.
+
+The meaning of value is as follows.
+
+`lc_wrapper=s:h:e:f`
+
+* `s` : Summary starts when # of output lines exceed 's' (default s=50)
+* `h` : Summary displays the first h lines and max 2 x h error lines. (default h=20)
+* `e` : Max # of output lines in progress. (default e=1)
+* `f` : Summary displays the last f lines (default f=20)
+
+The following is an example of code and output for `lc_wrapper=2:2:2:2`.
 
 ```
-%env lc_wrapper=s:h:e:f  
-s : Summary starts when # of output lines exceed 's' (default s=50)
-h : Summary displays the first h lines and max 2 x h error lines. (default h=20)
-e : Max # of output lines in progress. (default e=1)
-f : Summary displays the last f lines (default f=20)
-
-Example:  
-
-[In]
----
-%env lc_wrapper=2:2:2:2
-
 [In]
 ---
 !!from time import sleep
@@ -171,65 +185,21 @@ Output Size(byte): 237, Lines: 18, Path: /notebooks/.log/20170426/20170426-14005
 
 ```
 
-* Manage a history of the output with the environment variable 'lc_wrapper_uuid'.
+#### `lc_wrapper_regex`
+
+The `lc_wrapper_regex` is a regular expression for finding error message lines from the output to display in the summarized output.
+
+If the value starts with `file:` such as `file:xxxx.txt`,
+the wrapper kernel interprets the part after `file:` as a filename in the same directory as a notebook file,
+read its contents as regular expressions.
+If the filename is `default` it is replaced with `.lc_wrapper_regex.txt`.
+In this file, one regular expression can be written on one line, and multiple lines can be described.
+
+If the regular expressions file is missing, the wrapper kernel generates a file with default contents.
+
+The following is an example of code and output for `lc_wrapper_regex=3|5|7`.
 
 ```
-%env lc_wrapper_uuid=x
-x : a character string that does not conflict with other uuid.
-If Jupyter-multi_outputs and Jupyter-LC_nblineage are installed and turned on, uuid is set automatically.
-When both lc_wrapper_uuid and Jupyter-LC_nblineage's uuid are set, lc_wrapper_uuid takes precedence.
-
-Example:  
-
-[In]
----
-%env lc_wrapper_uuid=857ade64-e4fe-4bcf-b46f-ac190ce44c44
-
-[In]
----
-!!from time import sleep
-for i in xrange(10):
-    print i
-    sleep(0.5)
-
-[Out]
----
-start:2017-04-26 13:59:49(JST)
-end:2017-04-26 13:59:54(JST)
-path:/notebooks/.log/20170426/20170426-135950-0120.log
-
-start:2017-04-26 14:00:51(JST)
-end:2017-04-26 14:00:56(JST)
-path:/notebooks/.log/20170426/20170426-140052-0662.log
-
-start time: 2017-04-26 14:20:37(JST)
-end time: 2017-04-26 14:20:42(JST)
-Output Size(byte): 305, Lines: 18, Path: /notebooks/.log/20170426/20170426-142038-0557.log
-0 keyword matched or stderr happened
-
-0
-1
-...
-8
-9
-```
-
-* Check the keywords with the environment variable 'lc_wrapper_regex'.
-
-```
-%env lc_wrapper_regex=y
-y = keywords : If check two words word1 and word2, write with a separator '|' such as y = word1|word2.
-y = file:filename : If use regular expression, write with a suffix 'file:' such as y = file:xxxxx.txt.
-The file will be saved in the same directory as notebooks.
-In the file, one regular expression can be written on one line, and multiple lines can be described.
-
-
-Example:  
-
-[In]
----
-%env lc_wrapper_regex=3|5|7
-
 [In]
 ---
 !!from time import sleep
@@ -271,19 +241,21 @@ Output Size(byte): 189, Lines: 16, Path: /notebooks/.log/20170426/20170426-14391
 9
 ```
 
-### Settings by configuration file
+### Settings by environment variables
 
-You can apply the settings to multiple notebooks using `.lc_wrapper` configuration file in the notebook directory as follows:
+Instead of the configuration file, you can set with the environment variables.
+
+For example, set the environment variables as follows.
 
 ```
-# Example of .lc_wrapper
-lc_wrapper_force=on
-lc_wrapper=2:2:2:2
-lc_wrapper_regex=3|5|7
+$ export lc_wrapper_force='on'
+$ export lc_wrapper='2:2:2:2'
+$ export lc_wrapper_regex='3|5|7'
 ```
+
+The name of environemnt variable is same to the key name of the configuration file.
 
 If you set both the configuration file and environment variables, the environment variables are applied and the duplicated entries in the configuration file are ignored.
-
 
 ## License
 
