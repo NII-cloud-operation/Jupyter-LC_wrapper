@@ -38,6 +38,7 @@ from fluent import sender
 SUMMARIZE_KEY = 'lc_wrapper'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
 FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
+MASKING_KEY = 'lc_wrapper_masking_pattern'
 
 IPYTHON_DEFAULT_PATTERN_FILE = '.lc_wrapper_regex.txt'
 IPYTHON_DEFAULT_PATTERN = '''ERROR|error|Error|Panic|panic|Invalid|invalid|Warning|warning|Bad|bad
@@ -589,6 +590,11 @@ class BufferedKernelBase(Kernel):
 
         self.log_history_data = self._read_log_history_file()
 
+        if MASKING_KEY in env:
+            self.masking_pattern = re.compile(env.get(MASKING_KEY))
+        else:
+            self.masking_pattern = None
+
         self.repatter = []
         text = env.get(IGNORE_SUMMARIZE_KEY, 'file:default')
         if text is None or len(text) == 0:
@@ -787,6 +793,7 @@ class BufferedKernelBase(Kernel):
             if 'ExecutionResult' in content['text']:
                 return content
             else:
+                content['text'] = self._mask_lines(content['text'])  # Replace secret patterns with asterisks
                 self.log_buff_append(content['text'])
                 self._log_buff_flush()
 
@@ -882,6 +889,19 @@ class BufferedKernelBase(Kernel):
                                   track=False,
                                   header=None,
                                   metadata=None)
+
+    def _mask_lines(self, string):
+        if not hasattr(self, 'masking_pattern'):
+            return string
+        elif self.masking_pattern is None:
+            return string
+        else:
+            pattern = self.masking_pattern
+
+            def asterisks_repl(match):
+                return len(match[0]) * '*'
+
+            return re.sub(pattern, asterisks_repl, string)
 
     def _get_cell_id(self, parent):
         if 'content' not in parent:
