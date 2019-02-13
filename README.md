@@ -142,6 +142,7 @@ This is an example of `.lc_wrapper` file.
 lc_wrapper_force=on
 lc_wrapper=2:2:2:2
 lc_wrapper_regex=3|5|7
+lc_wrapper_masking_pattern=(?:[0-9]{11}@[a-z]*.proxy.example.com:8080)|AKIAJTQHFTLP426OCK3Q|2468
 ```
 
 #### `lc_wrapper_force`
@@ -254,6 +255,55 @@ Output Size(byte): 189, Lines: 16, Path: /notebooks/.log/20170426/20170426-14391
 9
 ```
 
+#### `lc_wrapper_masking_pattern`
+
+Mask the keywords of the output and log file with variable 'lc_wrapper_masking_pattern'.
+
+The meaning of value is as follows.
+
+```
+lc_wrapper_masking_pattern=z
+z = keywords : If mask two words word1 and word2, write with a separator '|' such as z = word1|word2.
+z = regex : If use regular expression, write with a regular expression such as z = [0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com.
+z = keywords | regex : If use words and regular expression, write with a separator '|' such as z = word1|word2|[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com
+```
+
+Example1: `lc_wrapper_masking_pattern=home|123`
+
+```
+[In]
+---
+!!print("home is 123")
+
+[Out]
+---
+path: /notebooks/.log/20181127/20181127-032445-0875.log (2 logs recorded)
+start time: 2018-11-27 03:24:45(UTC)
+end time: 2018-11-27 03:24:45(UTC)
+output size: 474 bytes
+0 chunks with matched keywords or errors
+----
+**** is ***
+```
+
+Example2: `lc_wrapper_masking_pattern=home|abc|[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com`
+
+```
+[In]
+---
+!!print("home,123,jamine_wewe@163.com")
+
+[Out]
+---
+path: /notebooks/.log/20181127/20181127-054528-0906.log (9 logs recorded)
+start time: 2018-11-27 05:45:28(UTC)
+end time: 2018-11-27 05:45:28(UTC)
+output size: 494 bytes
+0 chunks with matched keywords or errors
+----
+****,123,*******************
+```
+
 ### Settings by environment variables
 
 Instead of the configuration file, you can set with the environment variables.
@@ -264,6 +314,7 @@ For example, set the environment variables as follows.
 $ export lc_wrapper_force='on'
 $ export lc_wrapper='2:2:2:2'
 $ export lc_wrapper_regex='3|5|7'
+$ export lc_wrapper_masking_pattern='[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com'
 ```
 
 The name of environemnt variable is same to the key name of the configuration file.
