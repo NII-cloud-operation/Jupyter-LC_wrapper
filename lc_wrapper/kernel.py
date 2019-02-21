@@ -195,6 +195,8 @@ class BufferedKernelBase(Kernel):
 
     execute_request_msg_id = None
 
+    log_file_object = None
+
     data_dir = Unicode()
     @default('data_dir')
     def _data_dir_default(self):
