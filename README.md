@@ -10,6 +10,7 @@ The lc_wrapper has several features shown below:
 * It is summarized that the contents displayed on the output area of the notebook.
 * The specified keywords can be checked.
 * The output results are saved in the files with the executed history.
+* Secrets words that specified by "pattern regexp" are masked with '***...'.
 
 ## Prerequisite
 
@@ -143,6 +144,7 @@ lc_wrapper_force=on
 lc_wrapper=2:2:2:2
 lc_wrapper_regex=3|5|7
 lc_wrapper_masking_pattern=(?:[0-9]{11}@[a-z]*.proxy.example.com:8080)|AKIAJTQHFTLP426OCK3Q|2468
+lc_wrapper_mask_log=on
 ```
 
 #### `lc_wrapper_force`
@@ -258,14 +260,12 @@ Output Size(byte): 189, Lines: 16, Path: /notebooks/.log/20170426/20170426-14391
 #### `lc_wrapper_masking_pattern`
 
 Mask the keywords of the output and log file with variable 'lc_wrapper_masking_pattern'.
-
+ 
 The meaning of value is as follows.
 
 ```
 lc_wrapper_masking_pattern=z
-z = keywords : If mask two words word1 and word2, write with a separator '|' such as z = word1|word2.
-z = regex : If use regular expression, write with a regular expression such as z = [0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com.
-z = keywords | regex : If use words and regular expression, write with a separator '|' such as z = word1|word2|[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com
+z is a regular expression to mask. Ex.) pass_word|[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com|AKIAIOSFODNN7EXAMPLE .
 ```
 
 Example1: `lc_wrapper_masking_pattern=home|123`
@@ -304,6 +304,14 @@ output size: 494 bytes
 ****,123,*******************
 ```
 
+#### `lc_wrapper_mask_log`
+
+When value is `on`, mask the secret words (strings that matches to lc_wrapper_masking_pattern) with "***..." in the log file. 
+
+And when it is `off` or otherwise,  strings in log files are not masked. 
+
+default value is `on`.
+
 ### Settings by environment variables
 
 Instead of the configuration file, you can set with the environment variables.
@@ -315,6 +323,7 @@ $ export lc_wrapper_force='on'
 $ export lc_wrapper='2:2:2:2'
 $ export lc_wrapper_regex='3|5|7'
 $ export lc_wrapper_masking_pattern='[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com'
+$ export lc_wrapper_mask_log=off
 ```
 
 The name of environemnt variable is same to the key name of the configuration file.
