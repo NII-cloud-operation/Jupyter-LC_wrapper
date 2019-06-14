@@ -40,6 +40,7 @@ SUMMARIZE_KEY = 'lc_wrapper'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
 FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
 MASKING_KEY = 'lc_wrapper_masking_pattern'
+LOG_MASKING_KEY = 'lc_wrapper_mask_log'
 
 IPYTHON_DEFAULT_PATTERN_FILE = '.lc_wrapper_regex.txt'
 IPYTHON_DEFAULT_PATTERN = '''ERROR|error|Error|Panic|panic|Invalid|invalid|Warning|warning|Bad|bad
@@ -645,6 +646,11 @@ class BufferedKernelBase(Kernel):
         else:
             self.masking_pattern = None
 
+        if LOG_MASKING_KEY in env:
+            self.log_mask = env.get(LOG_MASKING_KEY)
+        else:
+            self.log_mask = 'on'
+
         self.repatter = []
         text = env.get(IGNORE_SUMMARIZE_KEY, 'file:default')
         if text is None or len(text) == 0:
@@ -874,10 +880,14 @@ class BufferedKernelBase(Kernel):
             if 'ExecutionResult' in content['text']:
                 return content
             else:
-                content['text'] = self._mask_lines(content['text'])  # Replace secret patterns with asterisks
-                self.log_buff_append(content['text'])
+                masked_text = self._mask_lines(content['text']) 
+                if self.log_mask == 'on':
+                    self.log_buff_append(masked_text)
+                else : 
+                    self.log_buff_append(content['text'])
                 self._log_buff_flush()
 
+                content['text'] = masked_text
                 content_text_list = content['text'].splitlines(False)    # with LF
                 # save the stderr messages
                 if content['name'] == 'stderr':
@@ -901,7 +911,17 @@ class BufferedKernelBase(Kernel):
         elif msg_type == 'error':
             error_result = content.copy()
             error_result['execution_count'] = self.execution_count
-            self._store_result({'msg_type': msg_type, 'content': error_result})
+
+            if self.log_mask != 'on':
+                self._store_result({'msg_type': msg_type, 'content': error_result})
+
+            for i in range(len(error_result['traceback'])):
+                error_result['traceback'][i] = self._mask_lines(error_result['traceback'][i]) 
+            error_result['evalue'] = self._mask_lines(error_result['evalue'])
+
+            if self.log_mask == 'on':
+                self._store_result({'msg_type': msg_type, 'content': error_result})
+
             return error_result
 
         return content
