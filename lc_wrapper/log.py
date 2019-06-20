@@ -14,6 +14,7 @@ def parse_execution_info_log(log):
     r.gid = log.get('gid', None)
     r.notebook_path = log.get('notebook_path', None)
     r.lc_notebook_meme = log.get('lc_notebook_meme', None)
+    r.execute_reply_status = log.get('execute_reply_status', None)
     return r
 
 class ExecutionInfo(object):
@@ -33,6 +34,7 @@ class ExecutionInfo(object):
         else:
             self.notebook_path = None
             self.lc_notebook_meme = None
+        self.execute_reply_status = None
 
     def finished(self, keyword_buff_size):
         self.end_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
@@ -97,6 +99,7 @@ class ExecutionInfo(object):
                'uid': self.uid,
                'gid': self.gid,
                'notebook_path': self.notebook_path,
-               'lc_notebook_meme': self.lc_notebook_meme
+               'lc_notebook_meme': self.lc_notebook_meme,
+               'execute_reply_status': self.execute_reply_status
               }
         return log

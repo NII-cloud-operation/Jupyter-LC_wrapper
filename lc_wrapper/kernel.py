@@ -482,6 +482,8 @@ class BufferedKernelBase(Kernel):
             'log_path': self.file_full_path
         }
 
+        self.exec_info.execute_reply_status = content['status']
+
         return content
 
     def _post_send_reply_msg(self, parent, reply_msg):
@@ -814,6 +816,7 @@ class BufferedKernelBase(Kernel):
             self.log_buff_append(u'\n----\n{}----\n'.format(self.exec_info.to_logfile_footer()))
             for result in self.result_files:
                 self.log_buff_append(u'result: {}\n'.format(result))
+            self.log_buff_append(u'execute_reply_status: {}\n'.format(self.exec_info.execute_reply_status))
             self.block_messages = True
 
             self._log_buff_flush(force=True)
