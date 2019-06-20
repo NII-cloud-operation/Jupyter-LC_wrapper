@@ -3,20 +3,6 @@ import dateutil
 import os
 
 
-def parse_execution_info_log(log):
-    r = ExecutionInfo(log['code'])
-    r.log_path = log['path']
-    r.start_time = log['start']
-    r.end_time = log['end']
-    r.file_size = log['size']
-    r.server_signature = log.get('server_signature', None)
-    r.uid = log.get('uid', None)
-    r.gid = log.get('gid', None)
-    r.notebook_path = log.get('notebook_path', None)
-    r.lc_notebook_meme = log.get('lc_notebook_meme', None)
-    r.execute_reply_status = log.get('execute_reply_status', None)
-    return r
-
 class ExecutionInfo(object):
     def __init__(self, code, server_signature=None, notebook_data=None):
         self.code = code
