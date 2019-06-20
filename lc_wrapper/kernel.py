@@ -11,6 +11,7 @@ from ipykernel.kernelbase import Kernel
 from datetime import datetime
 import os
 import os.path
+import tempfile
 from jupyter_client.manager import KernelManager
 from jupyter_client.ioloop import IOLoopKernelManager
 from jupyter_core.application import JupyterApp
@@ -28,7 +29,7 @@ from .log import ExecutionInfo
 
 from traitlets.config.configurable import LoggingConfigurable, MultipleInstanceError
 from traitlets import (
-    Unicode, default
+    Unicode, List, default
 )
 from ipython_genutils import py3compat
 from ipython_genutils.py3compat import PY3
@@ -223,6 +224,30 @@ class BufferedKernelBase(Kernel):
             return ''
         return os.path.join(self.data_dir, 'server_signature')
 
+    keyword_pattern_file_paths = List()
+    @default('keyword_pattern_file_paths')
+    def _keyword_pattern_file_paths_default(self):
+        return [
+            os.path.join(self.get_notebook_path(), IPYTHON_DEFAULT_PATTERN_FILE),
+            os.path.join(os.path.expanduser('~/'), IPYTHON_DEFAULT_PATTERN_FILE)
+        ]
+
+    log_dirs = List()
+    @default('log_dirs')
+    def _log_dirs_default(self):
+        return [
+            os.path.join(self.get_notebook_path(), '.log'),
+            os.path.expanduser('~/.log')
+        ]
+
+    configfile_paths = List()
+    @default('configfile_paths')
+    def _configfile_paths_default(self):
+        return [
+            os.path.join(self.get_notebook_path(), '.lc_wrapper'),
+            os.path.join(os.path.expanduser('~/'), '.lc_wrapper')
+        ]
+
     def __init__(self, **kwargs):
         Kernel.__init__(self, **kwargs)
 
@@ -346,14 +371,37 @@ class BufferedKernelBase(Kernel):
             thread.start()
             self.threads[channel] = thread
 
-        self.notebook_path = self.get_notebook_path(self.kc)
-        self.log_path = os.path.join(self.notebook_path, u'.log')
-        if not os.path.exists(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE)):
-            with open(os.path.join(self.notebook_path, IPYTHON_DEFAULT_PATTERN_FILE), 'w') as f:
-                f.write(IPYTHON_DEFAULT_PATTERN)
+        for log_dir in self.log_dirs:
+            if self._is_writable_dir(log_dir):
+                self.log_path = log_dir
+                break;
+        self.log.debug('log output directory: %s', self.log_path)
+
+        if self._find_default_keyword_pattern_file() is None:
+            self.log.info('default keyword pattern file "%s" not found', IPYTHON_DEFAULT_PATTERN_FILE)
+            try:
+                self._generate_default_keyword_pattern_file()
+            except Exception as e:
+                self.log.exception("failed to generate default keyword pattern file: %s", e)
+
         self.exec_info = None
 
+        self.notebook_path = self.get_notebook_path()
         self.log.debug('notebook_path: %s', self.notebook_path)
+
+    def _is_writable_dir(self, path):
+        temp_dir = None
+        try:
+            if not os.path.exists(path):
+                os.makedirs(path)
+            temp_dir = tempfile.mkdtemp(dir=path)
+            return True
+        except (OSError, IOError) as e:
+            self.log.debug("_is_writable_dir: %s", e)
+            return False
+        finally:
+            if temp_dir is not None:
+                os.rmdir(temp_dir)
 
     def _get_wrapped_kernel_name(self, km):
         raise NotImplementedError()
@@ -399,7 +447,7 @@ class BufferedKernelBase(Kernel):
 
         self.exec_info = ExecutionInfo(code, self.get_server_signature(), notebook_data)
         if not silent:
-            env = self._get_config(self.kc)
+            env = self._get_config()
             self.summarize_on, new_code = self.is_summarize_on(code, env)
             self._init_default_config()
             self._start_log()
@@ -543,13 +591,19 @@ class BufferedKernelBase(Kernel):
             self.log.debug('idle: msg_id=%s', msg_id)
             return
 
-    def get_notebook_path(self, client=None):
+    def get_notebook_path(self):
         return getcwd()
 
-    def _get_config(self, client):
+    def _find_config_file(self):
+        for path in self.configfile_paths:
+            if os.path.exists(path):
+                return path
+        return None
+
+    def _get_config(self):
         env = os.environ
-        config_path = os.path.join(self.notebook_path, '.lc_wrapper')
-        if not os.path.exists(config_path):
+        config_path = self._find_config_file()
+        if config_path is None:
             return env
         line_pattern = re.compile(r'(\S+)=(".*?"|\S+)')
         config = {}
@@ -598,30 +652,60 @@ class BufferedKernelBase(Kernel):
         elif 'file:' in text:
             file_name = text[text.rfind('find:')+6:].strip()
             if file_name == 'default':
-                file_name = IPYTHON_DEFAULT_PATTERN_FILE
-            file_path = os.path.join(self.notebook_path, file_name)
-            if os.path.exists(file_path):
-                with open(file_path, 'r') as file:
-                    patterns = file.readlines()
-
-                    self.log.debug('patterns :')
-                    for patt in patterns:
-                        patt = patt.strip()
-                        self.log.debug(patt)
-                        try:
-                            self.repatter.append(re.compile(patt))
-                        except Exception as e:
-                            self.keyword_buff_append(u'error : ' + unicode(e))
-                            self.log.warning("lc_wrapper_regex: " + str(e))
+                file_path = self._find_default_keyword_pattern_file()
             else:
-                self.keyword_buff_append(u'error : ' + u'Not found {}'.format(file_path))
-                self.log.warning('lc_wrapper_regex: ' + u'Not found {}'.format(file_path))
+                file_path = os.path.join(self.notebook_path, file_name)
+            if file_path is None:
+                self.keyword_buff_append(u'error : {} Not found'.format(IPYTHON_DEFAULT_PATTERN_FILE))
+                self.log.warning('lc_wrapper_regex: %s Not found', IPYTHON_DEFAULT_PATTERN_FILE)
+            elif os.path.exists(file_path):
+                try:
+                    patterns = self._read_keyword_pattern_file(file_path)
+                    for ptxt in patterns:
+                        self.repatter.append(re.compile(ptxt))
+                except Exception as e:
+                    self.keyword_buff_append(u'error : ' + str(e))
+                    self.log.exception("lc_wrapper_regex: %s", e)
+            else:
+                self.keyword_buff_append(u'error : {} Not found'.format(file_path))
+                self.log.warning('lc_wrapper_regex: %s Not found', file_path)
         else:
             try:
                 self.repatter.append(re.compile(text))
             except Exception as e:
-                self.keyword_buff_append(u'error : ' + unicode(e))
-                self.log.warning("lc_wrapper_regex: " + str(e))
+                self.keyword_buff_append(u'error : ' + str(e))
+                self.log.exception("lc_wrapper_regex: %s", e)
+
+    def _find_default_keyword_pattern_file(self):
+        for path in self.keyword_pattern_file_paths:
+            if os.path.exists(path):
+                return path
+        return None
+
+    def _read_keyword_pattern_file(self, filename):
+        with open(filename, 'r') as file:
+            patterns = file.readlines()
+            patterns = [x.strip() for x in patterns if len(x.strip()) > 0]
+            self.log.debug('patterns :')
+            for patt in patterns:
+                self.log.debug(patt)
+            return patterns
+
+    def _generate_default_keyword_pattern_file(self):
+        error = None
+        self.log.info('generate default keyword pattern file')
+        for path in self.keyword_pattern_file_paths:
+            if not os.path.exists(path):
+                try:
+                    with open(path, 'w') as f:
+                        f.write(IPYTHON_DEFAULT_PATTERN)
+                    self.log.info('generated default keyword pattern file: %s', path)
+                    return
+                except Exception as e:
+                    self.log.debug('_generate_default_keyword_pattern_file: %s', str(e))
+                    error = e
+        if error is not None:
+            raise error
 
     def is_summarize_on(self, code, env):
         force = None
