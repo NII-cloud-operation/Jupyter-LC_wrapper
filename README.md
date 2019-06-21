@@ -103,6 +103,9 @@ Example of cell metadata:
 }
 ```
 
+The log directory named `.log` is created in the current working directory (the same directory as the notebook file).
+If this directory is not writable, the `.log` directory is created in the your home directory.
+
 ### Enabling Summarizing mode
 
 To use the summarizing mode, you should make the code cell with `!!` at the beginning of the command.
@@ -121,10 +124,13 @@ Example:
 
 ### Settings by configuration file
 
-You can customize the summarizing settings with a configuration file.
+You can customize the summarizing settings by creating a configuration file
+named `.lc_wrapper`.
+The Jupyter-LC_wrapper searches the configuration file in the following order
+and reads the first file found.
 
-Please put the file named `.lc_wrapper` in the same directory as the notebook file.
-The settings are applied to the all notebooks in this directory.
+1. Current working directory (the same directory as the notebook file)
+2. Home directory (`~/.lc_wrapper`)
 
 The configuration file is a text file consisting of lines like `key=value`.
 If the line is empty or starts with `#`, it is ignored.
@@ -192,10 +198,17 @@ The `lc_wrapper_regex` is a regular expression for finding error message lines f
 If the value starts with `file:` such as `file:xxxx.txt`,
 the wrapper kernel interprets the part after `file:` as a filename in the same directory as a notebook file,
 read its contents as regular expressions.
-If the filename is `default` it is replaced with `.lc_wrapper_regex.txt`.
 In this file, one regular expression can be written on one line, and multiple lines can be described.
 
-If the regular expressions file is missing, the wrapper kernel generates a file with default contents.
+If the filename part is `default`, it means the default regular expressions file named `.lc_wrapper_regex.txt`.
+The Jupyter-LC_wrapper searches `.lc_wrapper_regex.txt` in the following order and reads the first file found.
+
+1. Current working directory (the same directory as the notebook file)
+2. Home directory (`~/.lc_wrapper_regex.txt`)
+
+The default value of `lc_wrapper_regex` is `file:default`.
+
+If the default regular expressions file is not found, the wrapper kernel generates a file with default contents.
 
 The following is an example of code and output for `lc_wrapper_regex=3|5|7`.
 
