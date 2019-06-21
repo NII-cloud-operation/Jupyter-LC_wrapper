@@ -99,7 +99,6 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
                         status_msg = True
                         if content['execution_state'] == 'idle':
                             self.kernel.idle_parent_header = msg['parent_header']
-                            self.kernel.idle_event.set()
                             idle = True
 
                 if msg['parent_header']['msg_type'] == 'shutdown_request':
@@ -131,12 +130,10 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
                     self.input_request()
 
                 if idle:
+                    self.kernel.idle_event.set()
                     parent_msg_id = msg['parent_header'].get('msg_id')
                     if parent_msg_id is not None:
                         self.kernel._remove_parent_header(parent_msg_id)
-                    if not self.kernel.flush_stream_event.is_set():
-                        self.kernel._send_last_stdout_stream_text()
-                        self.kernel.flush_stream_event.set()
             except Empty as e:
                 pass
             except Exception as e:
@@ -192,7 +189,6 @@ class BufferedKernelBase(Kernel):
     parent_headers = {}
     idle_event = Event()
     idle_parent_header = None
-    flush_stream_event = Event()
 
     execute_request_msg_id = None
 
@@ -355,8 +351,6 @@ class BufferedKernelBase(Kernel):
         self.log.debug('start_channels')
         self.kc.start_channels()
 
-        self.flush_stream_event.set()
-
         try:
             self.log.debug('wait for ready of wrapped kernel')
             self.kc.wait_for_ready(timeout=None)
@@ -462,8 +456,6 @@ class BufferedKernelBase(Kernel):
             self.log_buff_append(self.exec_info.to_logfile_header() + u'----\n')
             content[u'code'] = new_code
 
-            self.flush_stream_event.clear()
-
             self._allow_stdin = allow_stdin
 
     def _hook_reply_msg(self, reply_msg):
@@ -499,8 +491,8 @@ class BufferedKernelBase(Kernel):
         if reply_msg is None:
             return
         if reply_msg['msg_type'] == 'execute_reply':
-            self.log.debug('waiting for flushing stdout stream')
-            self.flush_stream_event.wait()
+            self.log.debug('flushing stdout stream')
+            self._send_last_stdout_stream_text()
             self.log.debug('flushed stdout stream')
 
             self.execute_request_msg_id = None
