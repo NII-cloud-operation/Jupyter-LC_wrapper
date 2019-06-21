@@ -3,19 +3,6 @@ import dateutil
 import os
 
 
-def parse_execution_info_log(log):
-    r = ExecutionInfo(log['code'])
-    r.log_path = log['path']
-    r.start_time = log['start']
-    r.end_time = log['end']
-    r.file_size = log['size']
-    r.server_signature = log.get('server_signature', None)
-    r.uid = log.get('uid', None)
-    r.gid = log.get('gid', None)
-    r.notebook_path = log.get('notebook_path', None)
-    r.lc_notebook_meme = log.get('lc_notebook_meme', None)
-    return r
-
 class ExecutionInfo(object):
     def __init__(self, code, server_signature=None, notebook_data=None):
         self.code = code
@@ -33,6 +20,7 @@ class ExecutionInfo(object):
         else:
             self.notebook_path = None
             self.lc_notebook_meme = None
+        self.execute_reply_status = None
 
     def finished(self, keyword_buff_size):
         self.end_time = datetime.now(dateutil.tz.tzlocal()).strftime('%Y-%m-%d %H:%M:%S(%Z)')
@@ -97,6 +85,7 @@ class ExecutionInfo(object):
                'uid': self.uid,
                'gid': self.gid,
                'notebook_path': self.notebook_path,
-               'lc_notebook_meme': self.lc_notebook_meme
+               'lc_notebook_meme': self.lc_notebook_meme,
+               'execute_reply_status': self.execute_reply_status
               }
         return log
