@@ -374,7 +374,7 @@ class BufferedKernelBase(Kernel):
         for log_dir in self.log_dirs:
             if self._is_writable_dir(log_dir):
                 self.log_path = log_dir
-                break;
+                break
         self.log.debug('log output directory: %s', self.log_path)
 
         if self._find_default_keyword_pattern_file() is None:
