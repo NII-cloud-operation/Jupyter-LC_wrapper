@@ -148,12 +148,13 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
         self.log.debug("wait input_reply")
         while True:
             try:
-                ident, reply = self.session.recv(self.stream, 0)
+                reply = self._get_msg_from_frontend()
+            except Empty:
+                if self.kernel.keyboard_interrupt:
+                    self.log.debug("input_request: interrupted")
+                    return
             except Exception:
                 self.log.warn("Invalid Message:", exc_info=True)
-            except KeyboardInterrupt:
-                # re-raise KeyboardInterrupt, to truncate traceback
-                raise KeyboardInterrupt
             else:
                 break
 
@@ -164,6 +165,18 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
                                       header=reply['header'],
                                       metadata=reply['metadata'])
         self.client.stdin_channel.send(msg)
+
+    def _get_msg_from_frontend(self, timeout=200):
+        ready = self.stream.poll(timeout)
+        if ready:
+            return self._recv_from_frontend()
+        else:
+            raise Empty
+
+    def _recv_from_frontend(self, **kwargs):
+        msg = self.stream.recv_multipart(**kwargs)
+        ident,smsg = self.session.feed_identities(msg)
+        return self.session.deserialize(smsg)
 
     def stop(self):
         if self.isAlive():
@@ -189,6 +202,8 @@ class BufferedKernelBase(Kernel):
     parent_headers = {}
     idle_event = Event()
     idle_parent_header = None
+
+    keyboard_interrupt = False
 
     execute_request_msg_id = None
 
@@ -273,6 +288,7 @@ class BufferedKernelBase(Kernel):
             self._hook_request_msg(parent)
 
             self.idle_event.clear()
+            self.keyboard_interrupt = False
 
             msg = self.kc.session.msg(msg_type, content)
             msgid = msg['header']['msg_id']
@@ -291,6 +307,7 @@ class BufferedKernelBase(Kernel):
                         self.log.debug("KeyboardInterrupt", exc_info=True)
                         # propagate SIGINT to wrapped kernel
                         self.km.interrupt_kernel()
+                        self.keyboard_interrupt = True
 
                         # this timer fire when the ipython kernel didnot interrupt within 5.0 sec.
                         self.timer = Timer(5.0, self.close_files)
