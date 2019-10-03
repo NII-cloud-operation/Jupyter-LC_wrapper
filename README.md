@@ -3,13 +3,16 @@
 # Jupyter-LC_wrapper
 
   Jupyter-LC_wrapper, we call lc_wrapper, is a wrapper kernel that relay the code and messages between the ipython kernel and the notebook server.
-  The original ipython kernel is hard to use at the time of huge output. The behavior of the browser slows down, and it stops working at the worst. The lc_wrapper resolved this difficulty by summarizing the data sent to the notebook server.  
+  The original ipython kernel is hard to use at the time of huge output. The behavior of the browser slows down, and it stops working at the worst. The lc_wrapper resolved this difficulty by summarizing the data sent to the notebook server. 
+  And, if you are planning to distribute notebooks, you should avoid printing secret information (ex. secret-key, telephone-no., etc) in the notebooks. The lc_wrapper has the ability to mask specified patterns in notebooks and log files.
+
 The lc_wrapper has several features shown below:
 
-* Turn on and off this features easily.
+* Turn on and off this summarize features easily.
 * It is summarized that the contents displayed on the output area of the notebook.
 * The specified keywords can be checked.
 * The output results are saved in the files with the executed history.
+* Secrets words that specified by "pattern regexp" are masked with '***...'.
 
 ## Prerequisite
 
@@ -122,6 +125,20 @@ Example:
 !!!ls -al
 ```
 
+### Enabling Masking feature
+The masking feature is enabled when it is installed.
+
+Specify the pattern to mask, in lc_wrapper_masking_pattern.
+
+Specify whether or not to mask the string in log file as well as the notebooks, in lc_wrapper_mask_log.
+
+This specifications can be set by environment variables or in configuration file.
+The environment variables overrides the variables in the configuration file.
+If neither setting is present, the default variables are used.
+
+Set the lc_wrapper_masking_pattern to undefined, if you do not want to apply the masking feature.
+When the pattern is undefined, the system returns the raw output string as is.
+
 ### Settings by configuration file
 
 You can customize the summarizing settings by creating a configuration file
@@ -142,6 +159,8 @@ This is an example of `.lc_wrapper` file.
 lc_wrapper_force=on
 lc_wrapper=2:2:2:2
 lc_wrapper_regex=3|5|7
+lc_wrapper_masking_pattern=(?:[0-9]{11}@[a-z]*.proxy.example.com:8080)|AKIAJTQHFTLP426OCK3Q|2468
+lc_wrapper_mask_log=on
 ```
 
 #### `lc_wrapper_force`
@@ -254,6 +273,61 @@ Output Size(byte): 189, Lines: 16, Path: /notebooks/.log/20170426/20170426-14391
 9
 ```
 
+#### `lc_wrapper_masking_pattern`
+
+Mask the keywords of the output and log files with variable 'lc_wrapper_masking_pattern'.
+ 
+The meaning of variable is as follows.
+
+```
+lc_wrapper_masking_pattern=z
+z is a regular expression to mask. Ex.) pass_word|[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com|AKIAIOSFODNN7EXAMPLE .
+```
+
+Example1: `lc_wrapper_masking_pattern=home|123`
+
+```
+[In]
+---
+!!print("home is 123")
+
+[Out]
+---
+path: /notebooks/.log/20181127/20181127-032445-0875.log (2 logs recorded)
+start time: 2018-11-27 03:24:45(UTC)
+end time: 2018-11-27 03:24:45(UTC)
+output size: 474 bytes
+0 chunks with matched keywords or errors
+----
+**** is ***
+```
+
+Example2: `lc_wrapper_masking_pattern=((070|080|090)-\d{4}-\d{4}|0\d-\d{4}-\d{4}|0\d{1,2}-\d{3,4}-\d{4})|[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com`
+
+```
+[In]
+---
+!!print("home: kawasaki-si,phone: 090-1234-5678,e-mail: jamine_wewe@163.com")
+
+[Out]
+---
+path: /notebooks/.log/20181127/20181127-054528-0906.log (9 logs recorded)
+start time: 2018-11-27 05:45:28(UTC)
+end time: 2018-11-27 05:45:28(UTC)
+output size: 494 bytes
+0 chunks with matched keywords or errors
+----
+home: kawasaki-si,phone: *************,e-mail: *******************
+```
+
+#### `lc_wrapper_mask_log`
+
+When value is `on`, mask the secret words (strings that matches to lc_wrapper_masking_pattern) with "***..." in the log file. 
+
+And when it is `off` or otherwise, strings in log files are not masked. 
+
+default value is `on`.
+
 ### Settings by environment variables
 
 Instead of the configuration file, you can set with the environment variables.
@@ -264,9 +338,11 @@ For example, set the environment variables as follows.
 $ export lc_wrapper_force='on'
 $ export lc_wrapper='2:2:2:2'
 $ export lc_wrapper_regex='3|5|7'
+$ export lc_wrapper_masking_pattern='[0-9a-zA-Z_]+@[0-9a-zA-Z.]+?com'
+$ export lc_wrapper_mask_log=off
 ```
 
-The name of environemnt variable is same to the key name of the configuration file.
+The name of environment variable is same to the key name of the configuration file.
 
 If you set both the configuration file and environment variables, the environment variables are applied and the duplicated entries in the configuration file are ignored.
 
