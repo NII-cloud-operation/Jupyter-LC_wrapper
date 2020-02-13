@@ -446,14 +446,15 @@ class BufferedKernelBase(Kernel):
         if not silent:
             self.execution_count += 1
 
-        cell_log_id = self._get_cell_id(parent)
-        if cell_log_id is not None:
+        cell_full_id = self._get_cell_id(parent)
+        if cell_full_id is not None:
+            cell_uuid, _ = self._parse_cell_id(cell_full_id)
             self.log_history_file_path = os.path.join(self.log_path,
-                                                      cell_log_id,
-                                                      cell_log_id + u'.json')
+                                                      cell_uuid,
+                                                      cell_uuid + u'.json')
         else:
             self.log_history_file_path = None
-        self.log_history_id = cell_log_id
+        self.log_history_id = cell_full_id
         self.log_history_data = self._read_log_history_file()
 
         notebook_data = self._get_notebook_data(parent)
@@ -1034,6 +1035,10 @@ class BufferedKernelBase(Kernel):
         if 'current' not in lc_cell_meme:
             return None
         return lc_cell_meme['current']
+
+    def _parse_cell_id(self, cell_id):
+        parts = cell_id.split('-')
+        return '-'.join(parts[:5]), '-'.join(parts[5:])
 
     def _get_notebook_data(self, parent):
         if 'content' not in parent:
