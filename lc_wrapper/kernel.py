@@ -85,9 +85,11 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
         self.log.debug("start ChannelReaderThread: channel_name=%s",
                        self.channel_name)
 
+        get_msg = getattr(self.client, 'get_%s_msg' % self.channel_name)
+
         while True:
             try:
-                msg = self.channel.get_msg(block=True, timeout=0.2)
+                msg = get_msg(timeout=0.2)
                 self.log.debug("Received %s message: %s",
                                self.channel_name, str(msg))
 
