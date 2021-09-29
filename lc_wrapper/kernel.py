@@ -181,7 +181,7 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
         return self.session.deserialize(smsg)
 
     def stop(self):
-        if self.isAlive():
+        if self.is_alive():
             self._exiting = True
             self.join()
 
