@@ -1,2 +1,5 @@
 *.pyc
 *.egg-info
+.python-version
+.lc_wrapper_regex.txt
+.DS_Store

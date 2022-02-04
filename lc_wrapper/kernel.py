@@ -26,6 +26,7 @@ except ImportError:
 import pickle
 import dateutil
 from .log import ExecutionInfo
+from .utils import run_sync
 
 from traitlets.config.configurable import LoggingConfigurable, MultipleInstanceError
 from traitlets import (
@@ -507,7 +508,7 @@ class BufferedKernelBase(Kernel):
             silent = content['silent']
             stop_on_error = content.get('stop_on_error', True)
             if not silent and reply_msg['content']['status'] == u'error' and stop_on_error:
-                self._abort_queues()
+                run_sync(self._abort_queues())
 
     def _post_wait_for_idle(self, parent, reply_msg):
         if reply_msg is None:
@@ -900,10 +901,10 @@ class BufferedKernelBase(Kernel):
             if 'ExecutionResult' in content['text']:
                 return content
             else:
-                masked_text = self._mask_lines(content['text']) 
+                masked_text = self._mask_lines(content['text'])
                 if self.log_mask == 'on':
                     self.log_buff_append(masked_text)
-                else : 
+                else :
                     self.log_buff_append(content['text'])
                 self._log_buff_flush()
 
@@ -936,7 +937,7 @@ class BufferedKernelBase(Kernel):
                 self._store_result({'msg_type': msg_type, 'content': error_result})
 
             for i in range(len(error_result['traceback'])):
-                error_result['traceback'][i] = self._mask_lines(error_result['traceback'][i]) 
+                error_result['traceback'][i] = self._mask_lines(error_result['traceback'][i])
             error_result['evalue'] = self._mask_lines(error_result['evalue'])
 
             if self.log_mask == 'on':

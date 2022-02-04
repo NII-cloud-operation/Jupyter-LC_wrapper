@@ -13,6 +13,7 @@ setup(
     packages=['lc_wrapper', 'lc_wrapper.ipython', 'lc_wrapper.bash'],
     install_requires=[
         'ipykernel>=4.0.0',
+        'ipython>=8.0.0',
         'jupyter_client!=7.0.0,!=7.0.1,!=7.0.2,!=7.0.3',
         'python-dateutil',
         'fluent-logger'

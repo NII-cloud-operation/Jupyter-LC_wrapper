@@ -1,0 +1,2 @@
+# packages for tests
+nose>=1.3.0
