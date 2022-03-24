@@ -117,7 +117,7 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
                     ident = self.kernel._topic(msg_type)
                     msg_content = self.kernel._hook_iopub_msg(parent_header, msg)
                 else:
-                    ident = self.kernel._parent_ident
+                    ident = self._get_kernel_parent_ident()
                     msg_content = msg['content']
 
                 if not status_msg:
@@ -182,6 +182,12 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
         msg = self.stream.recv_multipart(**kwargs)
         ident,smsg = self.session.feed_identities(msg)
         return self.session.deserialize(smsg)
+
+    def _get_kernel_parent_ident(self):
+        ident = self.kernel._parent_ident
+        if isinstance(ident, dict):
+            return ident['shell']
+        return ident
 
     def stop(self):
         if self.is_alive():
