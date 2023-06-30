@@ -73,5 +73,5 @@ class AsyncLCWrapperKernelManager(AsyncIOLoopKernelManager):
             # most 1s, checking every 0.1s.
             await self.finish_shutdown()
 
-        self.cleanup(connection_file=not restart)
+        await self.cleanup_resources(restart=restart)
 
