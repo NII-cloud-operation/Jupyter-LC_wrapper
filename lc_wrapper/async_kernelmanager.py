@@ -67,7 +67,7 @@ class AsyncLCWrapperKernelManager(AsyncIOLoopKernelManager):
         if now:
             await self._kill_kernel()
         else:
-            self.request_shutdown(restart=restart)
+            await self.request_shutdown(restart=restart)
             # Don't send any additional kernel kill messages immediately, to give
             # the kernel a chance to properly execute shutdown actions. Wait for at
             # most 1s, checking every 0.1s.
