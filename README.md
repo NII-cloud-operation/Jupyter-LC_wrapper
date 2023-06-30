@@ -66,7 +66,7 @@ Replace KernelManager for customized `shutdown_kernel()` behavior.
 Append the below line to `jupyter_notebook_config.py`.
 
 ```
-c.MultiKernelManager.kernel_manager_class = 'lc_wrapper.LCWrapperKernelManager'
+c.MultiKernelManager.kernel_manager_class = 'lc_wrapper.AsyncLCWrapperKernelManager'
 ```
 
 #### Replace KernelSpecManager (optional)

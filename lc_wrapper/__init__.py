@@ -2,6 +2,7 @@
 
 from .kernel import LCWrapperKernelManager
 from .kernelspec import LCWrapperKernelSpecManager
+from .async_kernelmanager import AsyncLCWrapperKernelManager
 
 # nbextension
 def _jupyter_nbextension_paths():
