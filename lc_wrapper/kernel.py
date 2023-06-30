@@ -37,6 +37,8 @@ from ipython_genutils.py3compat import PY3
 from types import MethodType
 from fluent import sender
 
+RECV_REPLY_TIMEOUT = 1
+
 SUMMARIZE_KEY = 'lc_wrapper'
 IGNORE_SUMMARIZE_KEY = 'lc_wrapper_regex'
 FORCE_SUMMARIZE_KEY = 'lc_wrapper_force'
@@ -312,8 +314,13 @@ class BufferedKernelBase(Kernel):
             if msg_type in self.blocking_msg_types:
                 while True:
                     try:
-                        reply_msg = self.kc._recv_reply(msgid, timeout=None)
+                        # Since _recv_reply does not terminate when KeyboardInterrupt occurs
+                        # (because event loop is a different thread from the main thread),
+                        # specify timeout to stop it periodically.
+                        reply_msg = self.kc._recv_reply(msgid, timeout=RECV_REPLY_TIMEOUT)
                         break
+                    except TimeoutError:
+                        pass
                     except KeyboardInterrupt:
                         self.log.debug("KeyboardInterrupt", exc_info=True)
                         # propagate SIGINT to wrapped kernel
