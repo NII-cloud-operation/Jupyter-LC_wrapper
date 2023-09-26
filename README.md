@@ -20,6 +20,8 @@ The lc_wrapper has several features shown below:
 * Python2.7
 * (Optional) Jupyter-LC_nblineage and Jupyter-multi_outputs ... to track relation between output file and cell (MEME)
 
+Note: Jupyter-LC_wrapper is prepared for Python and bash at this moment.
+
 ## How to Install
 #### Install Jupyter-LC_wrapper
 
