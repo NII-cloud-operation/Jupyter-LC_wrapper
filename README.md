@@ -348,6 +348,14 @@ The name of environment variable is same to the key name of the configuration fi
 
 If you set both the configuration file and environment variables, the environment variables are applied and the duplicated entries in the configuration file are ignored.
 
+### `lc_wrapper_fluentd_host`, `lc_wrapper_fluentd_port`, `lc_wrapper_fluentd_tag`
+
+If you want to send the log to fluentd, you can set the following environment variables.
+
+- `lc_wrapper_fluentd_host`: The host name of fluentd server. lc_wrapper does not send the log to fluentd if this variable is not set.
+- `lc_wrapper_fluentd_port`: The port number of fluentd server. The default value is 24224.
+- `lc_wrapper_fluentd_tag`: The tag name of fluentd. The default value is `lc_wrapper`.
+
 ## License
 
 This project is licensed under the terms of the Modified BSD License (also known as New or Revised or 3-Clause BSD), see LICENSE.txt.
