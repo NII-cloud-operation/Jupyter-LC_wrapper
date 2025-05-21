@@ -111,6 +111,8 @@ Example of cell metadata:
 The log directory named `.log` is created in the current working directory (the same directory as the notebook file).
 If this directory is not writable, the `.log` directory is created in the your home directory.
 
+For information about the log directory structure, file types and contents, see [docs/log-files.md](docs/log-files.md).
+
 ### Enabling Summarizing mode
 
 To use the summarizing mode, you should make the code cell with `!!` at the beginning of the command.
