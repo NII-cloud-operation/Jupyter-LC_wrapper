@@ -16,8 +16,8 @@ The lc_wrapper has several features shown below:
 
 ## Prerequisite
 
-* Jupyter Notebook 4.2.x
-* Python2.7
+* JupyterLab 4.x
+* Python 3.x
 * (Optional) Jupyter-LC_nblineage and Jupyter-multi_outputs ... to track relation between output file and cell (MEME)
 
 > Note: Jupyter-LC_wrapper is prepared for Python and bash at this moment.
@@ -47,18 +47,14 @@ In order to save output files with cell MEMEs, you should install and enable Jup
 
 #### Install and enable frontend extension
 
-Jupyter-LC_wrapper has the frontend extension for recording log file history as cell metadata.
+Jupyter-LC_wrapper has the JupyterLab extension for recording log file history as cell metadata.
 
-To install the extension, copy its files into the jupyter server's search directory.
+The extension is automatically installed when you install lc_wrapper with pip.
 
-```
-jupyter nbextension install --py lc_wrapper --user
-```
-
-To use the extension, you will also need to enable it.
+To enable the extension:
 
 ```
-jupyter nbextension enable --py lc_wrapper --user
+jupyter labextension enable lc_wrapper
 ```
 
 #### Replace KernelManager
@@ -87,13 +83,44 @@ If you want to install additional kernels to this kernel spec list,
 you can use `jupyter wrapper-kernelspec` command like `jupyter kernelspec` command.
 For details, please execute `jupyter wrapper-kernelspec --help`.
 
+## Development
+
+### Running E2E tests locally
+
+To run E2E tests locally with Docker:
+
+1. Build the Docker image:
+```bash
+docker build -t lc_wrapper:test .
+```
+
+2. Create the work directory and start the container:
+```bash
+mkdir -p ui-tests/e2e-notebook/artifacts/jupyter-work
+docker run -d \
+  --name lc-wrapper-test \
+  -p 8888:8888 \
+  -v $(pwd)/ui-tests/e2e-notebook/artifacts/jupyter-work:/home/jovyan/work \
+  lc_wrapper:test \
+  start-notebook.sh --ServerApp.token='test-token' --ServerApp.allow_origin='*' --ServerApp.root_dir='/home/jovyan/work'
+sleep 30
+curl --retry 10 --retry-delay 5 --retry-connrefused --fail http://localhost:8888/lab?token=test-token || (docker logs lc-wrapper-test && exit 1)
+```
+
+3. Access JupyterLab at: http://localhost:8888/lab?token=test-token
+
+4. When finished, stop and remove the container:
+```bash
+docker stop lc-wrapper-test && docker rm lc-wrapper-test
+```
+
 ## How to Use
 
 ### Logging cell output
 
 The Jupyter-LC_wrapper kernel logs the cell output to a local file for each execution.
 The frontend extension records the log file path as cell metadata.
-The log file path is sent to the frontend with `execute_reply` message.
+The log file path is sent to the frontend with `execute_result` message metadata.
 
 Example of cell metadata:
 ```
@@ -195,8 +222,8 @@ The following is an example of code and output for `lc_wrapper=2:2:2:2`.
 [In]
 ---
 !!from time import sleep
-for i in xrange(10):
-    print i
+for i in range(10):
+    print(i)
     sleep(0.5)
 
 [Out]
@@ -239,8 +266,8 @@ The following is an example of code and output for `lc_wrapper_regex=3|5|7`.
 [In]
 ---
 !!from time import sleep
-for i in xrange(10):
-    print i
+for i in range(10):
+    print(i)
     sleep(0.5)
 
 [Out]

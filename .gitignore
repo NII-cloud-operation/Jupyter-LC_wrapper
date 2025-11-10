@@ -1,5 +1,34 @@
+# JupyterLab extension
+*.bundle.*
+lib/
+node_modules/
+*.log
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+lc_wrapper/labextension
+.yarn/
+
+# Python
 *.pyc
+*.py[cod]
+__pycache__/
 *.egg-info
+*.egg
 .python-version
+build/
+dist/
+.pytest_cache/
+lc_wrapper/_version.py
+
+# Project specific
 .lc_wrapper_regex.txt
+
+# Jupyter
+.ipynb_checkpoints/
+
+# E2E tests
+ui-tests/e2e-notebook/artifacts/
+
+# OS
 .DS_Store
