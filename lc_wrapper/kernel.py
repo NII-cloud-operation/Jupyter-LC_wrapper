@@ -459,6 +459,12 @@ class BufferedKernelBase(Kernel):
 
         self.execute_request_msg_id = parent['header']['msg_id']
 
+        # Get cell_id from metadata
+        self.current_cell_id = parent.get('metadata', {}).get('cellId')
+
+        # Debug: check what's in metadata
+        self.log.debug('[lc_wrapper] execute_request metadata: %s', parent.get('metadata', {}))
+
         if not silent:
             self.execution_count += 1
 
@@ -507,7 +513,8 @@ class BufferedKernelBase(Kernel):
         content = reply['content']
         content['execution_count'] = self.execution_count
         content['lc_wrapper'] = {
-            'log_path': self.file_full_path
+            'log_path': self.file_full_path,
+            'cellId': self.current_cell_id
         }
 
         self.exec_info.execute_reply_status = content['status']
@@ -1039,6 +1046,16 @@ class BufferedKernelBase(Kernel):
             return re.sub(pattern, asterisks_repl, string)
 
     def _get_cell_id(self, parent):
+        # Try new metadata-based approach first
+        metadata = parent.get('metadata', {})
+        lc_wrapper = metadata.get('lc_wrapper', {})
+        lc_wrapper_last_execution = lc_wrapper.get('last_execution')
+        if lc_wrapper_last_execution:
+            lc_current_cell_meme = lc_wrapper_last_execution.get('lc_current_cell_meme')
+            if lc_current_cell_meme:
+                return lc_current_cell_meme
+
+        # Fall back to legacy content-based approach
         if 'content' not in parent:
             return None
         content = parent['content']
@@ -1057,6 +1074,21 @@ class BufferedKernelBase(Kernel):
         return '-'.join(parts[:5]), '-'.join(parts[5:])
 
     def _get_notebook_data(self, parent):
+        # Try new metadata-based approach first
+        metadata = parent.get('metadata', {})
+        lc_wrapper = metadata.get('lc_wrapper', {})
+        lc_wrapper_last_execution = lc_wrapper.get('last_execution')
+        if lc_wrapper_last_execution:
+            result = {}
+            lc_current_notebook_meme = lc_wrapper_last_execution.get('lc_current_notebook_meme')
+            if lc_current_notebook_meme:
+                result['lc_notebook_meme'] = {'current': lc_current_notebook_meme}
+            notebook_path = lc_wrapper_last_execution.get('notebook_path')
+            if notebook_path:
+                result['notebook_path'] = notebook_path
+            return result
+
+        # Fall back to legacy content-based approach
         if 'content' not in parent:
             return None
         content = parent['content']
