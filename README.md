@@ -2,6 +2,8 @@
 
 # Jupyter-LC_wrapper
 
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/NII-cloud-operation/Jupyter-LC_wrapper/feature/lab?urlpath=tree)
+
   Jupyter-LC_wrapper, we call lc_wrapper, is a wrapper kernel that relay the code and messages between the ipython kernel and the notebook server.
   The original ipython kernel is hard to use at the time of huge output. The behavior of the browser slows down, and it stops working at the worst. The lc_wrapper resolved this difficulty by summarizing the data sent to the notebook server. 
   And, if you are planning to distribute notebooks, you should avoid printing secret information (ex. secret-key, telephone-no., etc) in the notebooks. The lc_wrapper has the ability to mask specified patterns in notebooks and log files.
