@@ -548,12 +548,6 @@ class BufferedKernelBase(Kernel):
         self._replace_msg_id(msg_id, msg['parent_header']['msg_id'], content)
 
         if self.execute_request_msg_id == msg_id:
-            if msg['header']['msg_type'] == 'execute_result':
-                msg['metadata']['lc_wrapper'] = {
-                    'log_path': self.file_full_path,
-                    'cellId': self.current_cell_id
-                }
-
             return self._output_hook(msg)
 
         return content
