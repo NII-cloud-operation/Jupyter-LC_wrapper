@@ -18,7 +18,7 @@ The lc_wrapper has several features shown below:
 
 * JupyterLab 4.x
 * Python 3.x
-* (Optional) Jupyter-LC_nblineage and Jupyter-multi_outputs ... to track relation between output file and cell (MEME)
+* (Optional) Jupyter-LC_nblineage ... to track notebook and cell MEME
 
 > Note: Jupyter-LC_wrapper is prepared for Python and bash at this moment.
 
@@ -38,12 +38,11 @@ If you'd like to use with [bash kernel](https://github.com/takluyver/bash_kernel
 python -m lc_wrapper.bash.install
 ```
 
-#### Install Jupyter-LC_nblineage and Jupyter-multi_outputs
+#### Install Jupyter-LC_nblineage (Optional)
 
-In order to save output files with cell MEMEs, you should install and enable Jupyter-LC_nblineage and Jupyter-multi_outputs.
+In order to track notebook and cell MEMEs, you should install and enable Jupyter-LC_nblineage.
 
 - Jupyter-LC_nblineage ... See [Jupyter-LC_nblineage/README](https://github.com/NII-cloud-operation/Jupyter-LC_nblineage#installation)
-- Jupyter-multi_outputs ... See [Jupyter-multi_outputs/README](https://github.com/NII-cloud-operation/Jupyter-multi_outputs#how-to-install)
 
 #### Install and enable frontend extension
 
