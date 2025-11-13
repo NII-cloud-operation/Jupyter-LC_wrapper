@@ -20,7 +20,7 @@ RUN pip --no-cache-dir install /tmp/wrapper
 RUN pip install --upgrade jupyter_core==5.6.1
 
 # Install nblineage
-RUN pip install --no-cache git+https://github.com/NII-cloud-operation/Jupyter-LC_nblineage.git@feature/lab
+RUN pip install --no-cache git+https://github.com/NII-cloud-operation/Jupyter-LC_nblineage.git
 
 ## configurations
 RUN mkdir -p /tmp/kernels/python3-wrapper /tmp/wrapper-kernels/python3 && \
