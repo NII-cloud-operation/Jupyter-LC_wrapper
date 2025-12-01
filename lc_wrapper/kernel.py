@@ -6,6 +6,7 @@ except ImportError:
     from Queue import Empty  # Python 2
 import time
 import io
+from collections.abc import Mapping
 
 from ipykernel.kernelbase import Kernel
 from datetime import datetime
@@ -187,7 +188,7 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
 
     def _get_kernel_parent_ident(self):
         ident = self.kernel._parent_ident
-        if isinstance(ident, dict):
+        if isinstance(ident, Mapping):
             return ident['shell']
         return ident
 
