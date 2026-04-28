@@ -16,9 +16,6 @@ ENV PATH=/.npm/bin/:${PATH}
 COPY . /tmp/wrapper
 RUN pip --no-cache-dir install /tmp/wrapper
 
-# Workaround for https://github.com/NII-cloud-operation/Jupyter-LC_wrapper/issues/71
-RUN pip install --upgrade jupyter_core==5.6.1
-
 # Install nblineage
 RUN pip install --no-cache git+https://github.com/NII-cloud-operation/Jupyter-LC_nblineage.git
 
