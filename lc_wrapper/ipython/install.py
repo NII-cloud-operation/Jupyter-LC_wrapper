@@ -3,7 +3,6 @@ import json
 import os
 import sys
 
-from ipython_genutils.py3compat import PY3
 from jupyter_client.kernelspec import KernelSpecManager
 from IPython.utils.tempdir import TemporaryDirectory
 
@@ -62,7 +61,7 @@ def main(argv=None):
     install_my_kernel_spec('lc_wrapper', wrapper_kernel_json,
                            user=args.user, prefix=args.prefix,
                            kernelspec_manager_class=KernelSpecManager)
-    install_my_kernel_spec('python3' if PY3 else 'python2', kernel_json,
+    install_my_kernel_spec('python3', kernel_json,
                            user=args.user, prefix=args.prefix,
                            kernelspec_manager_class=LCWrapperKernelSpecManager)
 
