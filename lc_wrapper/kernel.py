@@ -1,9 +1,4 @@
-from __future__ import print_function
-
-try:
-    from queue import Empty  # Python 3
-except ImportError:
-    from Queue import Empty  # Python 2
+from queue import Empty
 import time
 import io
 from collections.abc import Mapping
@@ -20,10 +15,7 @@ import re
 import json
 from threading import (Thread, Event, Timer)
 
-try:
-    from os import getcwdu as getcwd  # Python 2
-except ImportError:
-    from os import getcwd  # Python 3
+from os import getcwd
 import pickle
 import dateutil
 from .log import ExecutionInfo
@@ -33,8 +25,6 @@ from traitlets.config.configurable import LoggingConfigurable, MultipleInstanceE
 from traitlets import (
     Unicode, List, default
 )
-from ipython_genutils import py3compat
-from ipython_genutils.py3compat import PY3
 from types import MethodType
 from fluent import sender
 
@@ -357,20 +347,14 @@ class BufferedKernelBase(Kernel):
 
             self.log.debug('override shell message handler: msg_type=%s', msg_type)
 
-            if PY3:
-                setattr(self, msg_type, MethodType(handler, self))
-            else:
-                setattr(self, msg_type, MethodType(handler, self, type(self)))
+            setattr(self, msg_type, MethodType(handler, self))
             self.shell_handlers[msg_type] = getattr(self, msg_type)
 
         comm_msg_types = ['comm_open', 'comm_msg', 'comm_close']
         for msg_type in comm_msg_types:
             self.log.debug('init shell comm message handler: msg_type=%s', msg_type)
 
-            if PY3:
-                setattr(self, msg_type, MethodType(handler, self))
-            else:
-                setattr(self, msg_type, MethodType(handler, self, type(self)))
+            setattr(self, msg_type, MethodType(handler, self))
             self.shell_handlers[msg_type] = getattr(self, msg_type)
 
     def start_ipython_kernel(self):
@@ -450,7 +434,7 @@ class BufferedKernelBase(Kernel):
     def _hook_execute_request_msg(self, parent):
         try:
             content = parent[u'content']
-            code = py3compat.cast_unicode_py2(content[u'code'])
+            code = content[u'code']
             silent = content[u'silent']
             allow_stdin = content.get('allow_stdin', False)
         except:
