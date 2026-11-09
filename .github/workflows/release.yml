@@ -10,20 +10,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Install node
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
        node-version: 20
 
     - name: Install Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: '3.11'
 
     - name: Cache pip dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('ui-tests/e2e-notebook/requirements.txt') }}
@@ -35,7 +35,7 @@ jobs:
       run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
     - name: Setup yarn cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
         key: yarn-${{ hashFiles('**/yarn.lock') }}
@@ -102,19 +102,19 @@ jobs:
         npm pack
         mv lc_wrapper-*.tgz lc_wrapper-nodejs.tgz
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: always()
       with:
         name: e2e-results
         path: ui-tests/e2e-notebook/artifacts/
         retention-days: 30
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: lc_wrapper-sdist
         path: lc_wrapper.tar.gz
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: lc_wrapper-nodejs
         path: lc_wrapper-nodejs.tgz
@@ -125,44 +125,27 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: lc_wrapper-sdist
 
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: lc_wrapper-nodejs
 
-    - name: release
-      uses: actions/create-release@v1
-      id: create_release
-      with:
-        draft: true
-        prerelease: false
-        release_name: ${{ github.ref }}
-        tag_name: ${{ github.ref }}
-        body_path: CHANGELOG.md
+    - name: Create draft release with packages
       env:
-        GITHUB_TOKEN: ${{ github.token }}
-
-    - name: upload pip package
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: lc_wrapper.tar.gz
-        asset_name: lc_wrapper-${{ github.ref_name }}.tar.gz
-        asset_content_type: application/gzip
-
-    - name: upload nodejs package
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: lc_wrapper-nodejs.tgz
-        asset_name: lc_wrapper-${{ github.ref_name }}.tgz
-        asset_content_type: application/gzip
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ github.ref_name }}
+      run: |
+        set -eux
+        mv lc_wrapper.tar.gz "lc_wrapper-${TAG}.tar.gz"
+        mv lc_wrapper-nodejs.tgz "lc_wrapper-${TAG}.tgz"
+        gh release create "$TAG" \
+          --draft \
+          --title "$TAG" \
+          --notes-file CHANGELOG.md \
+          "lc_wrapper-${TAG}.tar.gz" \
+          "lc_wrapper-${TAG}.tgz"

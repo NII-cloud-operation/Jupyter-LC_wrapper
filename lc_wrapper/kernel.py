@@ -91,6 +91,21 @@ class ChannelReaderThread(Thread, LoggingConfigurable):
                 idle = False
                 status_msg = False
 
+                if self.channel_name == 'iopub' and not msg['parent_header']:
+                    # The wrapped kernel publishes some output outside of any request
+                    # (e.g. ipykernel 7 logging "No such comm"); forward it without a parent
+                    # as the kernel itself would, except status which this kernel publishes.
+                    if msg_type != 'status':
+                        self.session.send(self.stream,
+                                          msg_type,
+                                          msg['content'],
+                                          parent={},
+                                          ident=self.kernel._topic(msg_type),
+                                          header=msg['header'],
+                                          metadata=msg['metadata'],
+                                          buffers=msg['buffers'])
+                    continue
+
                 if self.channel_name == 'iopub':
                     content = msg['content']
                     if msg_type == 'status':
