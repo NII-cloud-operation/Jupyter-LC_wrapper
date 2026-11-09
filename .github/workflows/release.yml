@@ -143,9 +143,12 @@ jobs:
         set -eux
         mv lc_wrapper.tar.gz "lc_wrapper-${TAG}.tar.gz"
         mv lc_wrapper-nodejs.tgz "lc_wrapper-${TAG}.tgz"
+        previous_tag=$(gh release view --json tagName --jq .tagName)
         gh release create "$TAG" \
+          --verify-tag \
           --draft \
           --title "$TAG" \
-          --notes-file CHANGELOG.md \
+          --generate-notes \
+          --notes-start-tag "$previous_tag" \
           "lc_wrapper-${TAG}.tar.gz" \
           "lc_wrapper-${TAG}.tgz"
