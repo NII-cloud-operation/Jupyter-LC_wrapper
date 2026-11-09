@@ -1,6 +1,6 @@
 {
   "name": "lc_wrapper",
-  "version": "1.3.2",
+  "version": "2026.11.0",
   "description": "Kernel Wrapper for Literate Computing",
   "keywords": [
     "jupyter",
