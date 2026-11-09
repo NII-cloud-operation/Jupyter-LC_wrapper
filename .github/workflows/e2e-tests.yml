@@ -142,6 +142,16 @@ jobs:
           mkdir -p ui-tests/e2e-notebook/artifacts
           docker logs lc-wrapper-test > ui-tests/e2e-notebook/artifacts/lc-wrapper-container.log 2>&1 || true
 
+      - name: Check kernel errors in container log
+        run: |
+          set -euxo pipefail
+          log=ui-tests/e2e-notebook/artifacts/lc-wrapper-container.log
+          test -s "$log"
+          if grep -nF -A 10 '[IPKernelApp] ERROR |' "$log"; then
+            echo "::error::The kernel logged errors during the E2E tests"
+            exit 1
+          fi
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
