@@ -135,34 +135,17 @@ jobs:
       with:
         name: lc_wrapper-nodejs
 
-    - name: release
-      uses: actions/create-release@v1
-      id: create_release
-      with:
-        draft: true
-        prerelease: false
-        release_name: ${{ github.ref }}
-        tag_name: ${{ github.ref }}
-        body_path: CHANGELOG.md
+    - name: Create draft release with packages
       env:
-        GITHUB_TOKEN: ${{ github.token }}
-
-    - name: upload pip package
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: lc_wrapper.tar.gz
-        asset_name: lc_wrapper-${{ github.ref_name }}.tar.gz
-        asset_content_type: application/gzip
-
-    - name: upload nodejs package
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: lc_wrapper-nodejs.tgz
-        asset_name: lc_wrapper-${{ github.ref_name }}.tgz
-        asset_content_type: application/gzip
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ github.ref_name }}
+      run: |
+        set -eux
+        mv lc_wrapper.tar.gz "lc_wrapper-${TAG}.tar.gz"
+        mv lc_wrapper-nodejs.tgz "lc_wrapper-${TAG}.tgz"
+        gh release create "$TAG" \
+          --draft \
+          --title "$TAG" \
+          --notes-file CHANGELOG.md \
+          "lc_wrapper-${TAG}.tar.gz" \
+          "lc_wrapper-${TAG}.tgz"
